@@ -46,7 +46,8 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
         // Action Column: Delete Button
         grid.addComponentColumn(secret -> {
             Button deleteBtn = new Button("Delete", ev -> {
-                secretRepository.deleteById(secret.getKey());
+                // SAFER: Let Spring Data extract the exact ID from the object itself
+                secretRepository.delete(secret);
                 refreshGrid();
                 Notification.show("Deleted " + secret.getKey(), 2000, Notification.Position.BOTTOM_END);
             });
@@ -56,12 +57,18 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
 
         // Form fields with explicit Bitwarden bypass
         TextField keyField = new TextField("New Key");
-        keyField.getElement().executeJs("this.inputElement.setAttribute('data-bitwarden-ignore', '');");
-        keyField.getElement().executeJs("this.inputElement.setAttribute('autocomplete', 'off');");
+        keyField.getElement().executeJs(
+                "this.inputElement.setAttribute('data-bwignore', 'true');"
+                + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
+                + "this.inputElement.setAttribute('autocomplete', 'new-password');"
+        );
 
         PasswordField valueField = new PasswordField("Secret Value");
-        valueField.getElement().executeJs("this.inputElement.setAttribute('data-bitwarden-ignore', '');");
-        valueField.getElement().executeJs("this.inputElement.setAttribute('autocomplete', 'new-password');");
+        valueField.getElement().executeJs(
+                "this.inputElement.setAttribute('data-bwignore', 'true');"
+                + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
+                + "this.inputElement.setAttribute('autocomplete', 'new-password');"
+        );
 
         Button saveButton = new Button("Encrypt & Save", e -> {
             if (!keyField.isEmpty() && !valueField.isEmpty()) {
@@ -95,6 +102,9 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
 
     private void refreshGrid() {
         grid.setItems(secretRepository.findAll());
+        if (grid.getDataProvider() != null) {
+            grid.getDataProvider().refreshAll();
+        }
     }
 
     @Override

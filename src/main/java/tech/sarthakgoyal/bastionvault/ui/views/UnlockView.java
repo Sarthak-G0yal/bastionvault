@@ -39,8 +39,12 @@ public class UnlockView extends VerticalLayout implements BeforeEnterObserver {
 
         PasswordField masterPasswordField = new PasswordField("Master Password");
         masterPasswordField.setWidthFull(); // Stretch to fill the card
-        masterPasswordField.getElement().executeJs("this.inputElement.setAttribute('data-bitwarden-ignore', '');");
-        masterPasswordField.getElement().executeJs("this.inputElement.setAttribute('data-1p-ignore', '');");
+        // Do this for your password fields
+        masterPasswordField.getElement().executeJs(
+                "this.inputElement.setAttribute('data-bwignore', 'true');"
+                + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
+                + "this.inputElement.setAttribute('autocomplete', 'new-password');"
+        );
         Button unlockButton = new Button("Unlock", e -> {
             try {
                 sessionManager.unlockVault(masterPasswordField.getValue());
