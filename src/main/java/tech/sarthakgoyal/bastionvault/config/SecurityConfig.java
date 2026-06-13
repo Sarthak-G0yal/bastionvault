@@ -2,6 +2,7 @@ package tech.sarthakgoyal.bastionvault.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -21,7 +22,9 @@ public class SecurityConfig {
         this.tokenFilter = tokenFilter;
     }
 
+    // 1. THE API GUARD (Intercepts Terraform / Ansible API calls)
     @Bean
+    @Order(1)
     public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/**")
@@ -33,12 +36,16 @@ public class SecurityConfig {
         return http.build();
     }
 
+    // 2. THE UI BYPASS (Lets Vaadin use its own internal CSRF and routing)
     @Bean
+    @Order(2)
     public SecurityFilterChain uiFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/**")
+                // Disable Spring's CSRF so Vaadin's internal CSRF tokens can do their job
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+
         return http.build();
     }
 
@@ -46,5 +53,4 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
 }

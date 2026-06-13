@@ -1,0 +1,79 @@
+
+html {
+    /* Natively enforce Dark Mode */
+    color-scheme: dark;
+    
+    /* AURA & VAADIN GLOBALS */
+    --vaadin-primary-color: #fe742a; /* Your Orange */
+    --vaadin-primary-text-color: #fe742a;
+    --vaadin-error-color: #772f1a; /* Your Crimson */
+    
+    /* Make Vaadin's default surface transparent so our gradient shows */
+    --vaadin-app-layout-background: transparent;
+    --vaadin-app-layout-navbar-background: transparent;
+    --vaadin-surface-color: transparent;
+    
+    --vaadin-border-radius: 12px; /* Softer, modern corners */
+}
+
+/* =========================================
+   RADIAL GRADIENT BACKGROUND
+   ========================================= */
+body {
+    /* Starts at Ice Blue/Teal mixed with deep green, fading to pitch black */
+    background: radial-gradient(circle at 10% 10%, #102a30 0%, #0c1713 40%, #050a08 100%);
+    background-attachment: fixed;
+    background-size: cover;
+    margin: 0;
+    min-height: 100vh;
+    color: #f1e9db; /* Your Cream color for text */
+}
+
+/* =========================================
+   GLASSMORPHISM (Frosted Glass Effect)
+   ========================================= */
+vaadin-grid, .glass-panel {
+    background: rgba(12, 23, 19, 0.4) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(93, 183, 222, 0.15) !important; 
+    border-radius: var(--vaadin-border-radius);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Make inputs look modern and glassy */
+vaadin-text-field, vaadin-password-field, vaadin-email-field {
+    --vaadin-input-field-background: rgba(241, 233, 219, 0.05);
+    --vaadin-input-field-border-color: rgba(254, 116, 42, 0.3); /* Subtle orange border */
+}
+
+/* =========================================
+   BUTTON GLOW & TACTILE HOVER
+   ========================================= */
+vaadin-button {
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Primary Button Glow (Orange) */
+vaadin-button[theme~="primary"] {
+    background-color: var(--vaadin-primary-color);
+    color: #0c1713; /* High contrast dark text */
+    box-shadow: 0 4px 15px rgba(254, 116, 42, 0.2);
+}
+
+vaadin-button[theme~="primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(254, 116, 42, 0.5); /* Stronger orange glow */
+}
+
+/* Error/Lock Button Glow (Crimson) */
+vaadin-button[theme~="error"] {
+    background-color: var(--vaadin-error-color);
+    color: #f1e9db;
+}
+
+vaadin-button[theme~="error"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(119, 47, 26, 0.6); 
+}

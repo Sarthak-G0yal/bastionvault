@@ -41,6 +41,7 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
         // Grid Columns
         grid.addColumn(SecretDocument::getKey).setHeader("Secret Key").setAutoWidth(true);
         grid.addColumn(SecretDocument::getLastUpdated).setHeader("Last Updated");
+        grid.addClassName("glass-panel");
 
         // Action Column: Delete Button
         grid.addComponentColumn(secret -> {
@@ -55,12 +56,12 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
 
         // Form fields with explicit Bitwarden bypass
         TextField keyField = new TextField("New Key");
-        keyField.getElement().setAttribute("data-bitwarden-ignore", "");
-        keyField.getElement().setAttribute("autocomplete", "off");
+        keyField.getElement().executeJs("this.inputElement.setAttribute('data-bitwarden-ignore', '');");
+        keyField.getElement().executeJs("this.inputElement.setAttribute('autocomplete', 'off');");
 
         PasswordField valueField = new PasswordField("Secret Value");
-        valueField.getElement().setAttribute("data-bitwarden-ignore", "");
-        valueField.getElement().setAttribute("autocomplete", "new-password");
+        valueField.getElement().executeJs("this.inputElement.setAttribute('data-bitwarden-ignore', '');");
+        valueField.getElement().executeJs("this.inputElement.setAttribute('autocomplete', 'new-password');");
 
         Button saveButton = new Button("Encrypt & Save", e -> {
             if (!keyField.isEmpty() && !valueField.isEmpty()) {
@@ -78,8 +79,10 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
 
         HorizontalLayout formLayout = new HorizontalLayout(keyField, valueField, saveButton);
+        formLayout.addClassName("glass-panel");
+        formLayout.setWidthFull();
+        formLayout.setPadding(true);
         formLayout.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
-
         Button lockButton = new Button("Lock Vault", e -> {
             sessionManager.lockVault();
             getUI().ifPresent(ui -> ui.navigate("unlock"));

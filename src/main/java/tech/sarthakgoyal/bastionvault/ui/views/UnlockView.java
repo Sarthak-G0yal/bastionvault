@@ -1,6 +1,5 @@
 package tech.sarthakgoyal.bastionvault.ui.views;
 
-import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.html.H2;
@@ -24,18 +23,24 @@ public class UnlockView extends VerticalLayout implements BeforeEnterObserver {
     public UnlockView(VaultSessionManager sessionManager, AdminProfileRepository adminRepository) {
         this.adminRepository = adminRepository;
 
+        // Inside the constructor of UnlockView.java
         setSizeFull();
         setAlignItems(Alignment.CENTER);
         setJustifyContentMode(JustifyContentMode.CENTER);
 
+        // CREATE THE FLOATING GLASS CARD
+        VerticalLayout glassCard = new VerticalLayout();
+        glassCard.addClassName("glass-panel");
+        glassCard.setMaxWidth("400px");
+        glassCard.setAlignItems(Alignment.CENTER);
+        glassCard.setPadding(true);
+
         H2 title = new H2("Vault is Locked");
 
         PasswordField masterPasswordField = new PasswordField("Master Password");
-        masterPasswordField.setWidth("300px");
-        // Block Bitwarden interference safely
-        masterPasswordField.getElement().setAttribute("data-bitwarden-ignore", "");
-        masterPasswordField.getElement().setAttribute("autocomplete", "current-password");
-
+        masterPasswordField.setWidthFull(); // Stretch to fill the card
+        masterPasswordField.getElement().executeJs("this.inputElement.setAttribute('data-bitwarden-ignore', '');");
+        masterPasswordField.getElement().executeJs("this.inputElement.setAttribute('data-1p-ignore', '');");
         Button unlockButton = new Button("Unlock", e -> {
             try {
                 sessionManager.unlockVault(masterPasswordField.getValue());
@@ -45,10 +50,12 @@ public class UnlockView extends VerticalLayout implements BeforeEnterObserver {
             }
         });
 
+        unlockButton.setWidthFull();
         unlockButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        unlockButton.addClickShortcut(Key.ENTER);
 
-        add(title, masterPasswordField, unlockButton);
+        // Add elements to the card, then add the card to the screen
+        glassCard.add(title, masterPasswordField, unlockButton);
+        add(glassCard);
     }
 
     @Override

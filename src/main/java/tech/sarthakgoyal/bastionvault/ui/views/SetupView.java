@@ -37,11 +37,11 @@ public class SetupView extends VerticalLayout implements BeforeEnterObserver {
 
         EmailField emailField = new EmailField("Administrator Email");
         emailField.setWidth("300px");
-        emailField.getElement().setAttribute("data-1p-ignore", "");
+        emailField.getElement().executeJs("this.inputElement.setAttribute('data-1p-ignore', '');");
 
         PasswordField passwordField = new PasswordField("Master Password");
         passwordField.setWidth("300px");
-        passwordField.getElement().setAttribute("data-1p-ignore", "");
+        passwordField.getElement().executeJs("this.inputElement.setAttribute('data-1p-ignore', '');");
 
         Button saveButton = new Button("Initialize Vault", e -> {
             if (!emailField.isEmpty() && !passwordField.isEmpty()) {
