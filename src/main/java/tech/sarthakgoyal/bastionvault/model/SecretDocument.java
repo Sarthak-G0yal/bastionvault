@@ -9,21 +9,17 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class SecretDocument {
 
     @Id
-    private String key;     // The plain text lookup key
-    private String ciphertext; // The encrypted value base64 encoded
-    private String iv;       // The initialization vector used for encryption, base64 encoded
+    private String key;
+    private String ciphertext;
+    private String iv;
     private LocalDateTime lastUpdated;
 
+    // By ONLY having an empty constructor, Spring Data is forced to use the 
+    // exact field names and setters, preventing mapping mix-ups.
     public SecretDocument() {
     }
 
-    public SecretDocument(String key, String ciphertext, String iv, LocalDateTime lastUpdated) {
-        this.key = key;
-        this.ciphertext = ciphertext;
-        this.iv = iv;
-        this.lastUpdated = lastUpdated;
-    }
-
+    // Getters and Setters
     public String getKey() {
         return key;
     }
@@ -55,5 +51,4 @@ public class SecretDocument {
     public void setLastUpdated(LocalDateTime lastUpdated) {
         this.lastUpdated = lastUpdated;
     }
-
 }

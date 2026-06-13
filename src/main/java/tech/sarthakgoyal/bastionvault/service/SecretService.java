@@ -1,45 +1,46 @@
 package tech.sarthakgoyal.bastionvault.service;
 
-import tech.sarthakgoyal.bastionvault.crypto.EncryptionEngine;
-import tech.sarthakgoyal.bastionvault.model.SecretDocument;
-import tech.sarthakgoyal.bastionvault.repository.SecretRepository;
-import org.springframework.stereotype.Service;
-
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.Optional;
+
+import javax.crypto.SecretKey;
+
+import org.springframework.stereotype.Service;
+
+import tech.sarthakgoyal.bastionvault.crypto.EncryptionEngine;
+import tech.sarthakgoyal.bastionvault.crypto.VaultSessionManager;
+import tech.sarthakgoyal.bastionvault.model.SecretDocument;
+import tech.sarthakgoyal.bastionvault.repository.SecretRepository;
 
 @Service
 public class SecretService {
 
     private final SecretRepository secretRepository;
     private final EncryptionEngine encryptionEngine;
+    private final VaultSessionManager vaultSessionManager;
 
-    public SecretService(SecretRepository secretRepository, EncryptionEngine encryptionEngine) {
+    public SecretService(SecretRepository secretRepository, EncryptionEngine encryptionEngine, VaultSessionManager vaultSessionManager) {
         this.secretRepository = secretRepository;
         this.encryptionEngine = encryptionEngine;
+        this.vaultSessionManager = vaultSessionManager;
     }
 
-    /**
-     * Encrypts the raw secret and saves it to MongoDB.
-     */
     public void encryptAndSave(String key, String rawValue) throws Exception {
-        SecretKey activeKey = getActiveKey(); // We will replace this in Phase 2
+        SecretKey activeKey = vaultSessionManager.getActiveKey();
 
-        String[] cryptoResult = encryptionEngine.encrypt(rawValue, activeKey);
-        String ciphertext = cryptoResult[0];
-        String iv = cryptoResult[1];
+        // Capture the strict Record payload
+        EncryptionEngine.CryptoPayload payload = encryptionEngine.encrypt(rawValue, activeKey);
 
-        SecretDocument document = new SecretDocument(key, ciphertext, iv, LocalDateTime.now());
+        SecretDocument document = new SecretDocument();
+        document.setKey(key);
+        // Explicitly grab the named variables
+        document.setCiphertext(payload.ciphertext());
+        document.setIv(payload.iv());
+        document.setLastUpdated(LocalDateTime.now());
+
         secretRepository.save(document);
     }
 
-    /**
-     * Retrieves the document from MongoDB and decrypts the value.
-     */
     public Optional<String> fetchAndDecrypt(String key) throws Exception {
         Optional<SecretDocument> documentOpt = secretRepository.findById(key);
 
@@ -48,20 +49,9 @@ public class SecretService {
         }
 
         SecretDocument doc = documentOpt.get();
-        SecretKey activeKey = getActiveKey(); // We will replace this in Phase 2
+        SecretKey activeKey = vaultSessionManager.getActiveKey();
 
         String decryptedValue = encryptionEngine.decrypt(doc.getCiphertext(), doc.getIv(), activeKey);
         return Optional.of(decryptedValue);
-    }
-
-    /**
-     * TEMPORARY PHASE 1 METHOD: Generates a weak, static key just so the app
-     * compiles and runs. In Phase 2, this will be deleted and replaced with our
-     * secure PBKDF2 logic.
-     */
-    private SecretKey getActiveKey() throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] keyBytes = digest.digest("temporary-phase1-dev-key".getBytes(StandardCharsets.UTF_8));
-        return new SecretKeySpec(keyBytes, "AES");
     }
 }
