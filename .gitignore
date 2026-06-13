@@ -1,0 +1,44 @@
+# --- Build Outputs ---
+target/
+build/
+out/
+bin/
+
+# --- IDE & Editor Settings ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.factorypath
+.vscode/
+.sts4-cache
+
+# --- Build Tools ---
+.gradle/
+.mvn/
+
+# --- Environment & Secret Files ---
+.env
+*.local
+secrets.yml
+application-local.properties
+application-local.yml
+
+# --- System & Log Files ---
+*.log
+.DS_Store
+Thumbs.db
+
+# --- Vaadin Generated Files & Frontend Build ---
+src/main/frontend/generated
+src/main/frontend/node_modules
+src/main/frontend/package.json
+src/main/frontend/package-lock.json
+src/main/frontend/vite.generated.ts
+src/main/frontend/vite.config.ts
+src/main/frontend/types.d.ts
+tsconfig.json
+.vaadin/
