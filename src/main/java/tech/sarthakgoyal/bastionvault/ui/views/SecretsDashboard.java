@@ -3,7 +3,8 @@ package tech.sarthakgoyal.bastionvault.ui.views;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.H2;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -38,39 +39,68 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
         this.secretRepository = secretRepository;
         this.adminRepository = adminRepository;
 
-        // Grid Columns
-        grid.addColumn(SecretDocument::getKey).setHeader("Secret Key").setAutoWidth(true);
-        grid.addColumn(SecretDocument::getLastUpdated).setHeader("Last Updated");
-        grid.addClassName("glass-panel");
+        setSizeFull();
+        setPadding(true);
+        setSpacing(true);
 
-        // Action Column: Delete Button
+        // Header Section (Title & Status & Lock Button)
+        H2 heading = new H2("Active Secrets Engine");
+        heading.getStyle().set("margin", "0");
+
+        Span statusBadge = new Span("Decrypted Status: Active");
+        statusBadge.getElement().getThemeList().add("badge success primary");
+
+        VerticalLayout titleLayout = new VerticalLayout(heading, statusBadge);
+        titleLayout.setPadding(false);
+        titleLayout.setSpacing(false);
+
+        Button lockButton = new Button("Lock Vault Storage", e -> {
+            sessionManager.lockVault();
+            getUI().ifPresent(ui -> ui.navigate("unlock"));
+        });
+        lockButton.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_PRIMARY);
+
+        HorizontalLayout topBar = new HorizontalLayout(titleLayout, lockButton);
+        topBar.setWidthFull();
+        topBar.setAlignItems(Alignment.CENTER);
+        topBar.setJustifyContentMode(JustifyContentMode.BETWEEN);
+
+        // Data Table Configuration
+        grid.addColumn(SecretDocument::getKey).setHeader("Secret Target Key").setAutoWidth(true).setFlexGrow(1);
+        grid.addColumn(SecretDocument::getLastUpdated).setHeader("Last Cryptographic Modification").setAutoWidth(true);
+        grid.addClassName("glass-panel");
+        grid.setSizeFull();
+
         grid.addComponentColumn(secret -> {
-            Button deleteBtn = new Button("Delete", ev -> {
-                // SAFER: Let Spring Data extract the exact ID from the object itself
+            Button deleteBtn = new Button("Revoke", ev -> {
                 secretRepository.delete(secret);
                 refreshGrid();
-                Notification.show("Deleted " + secret.getKey(), 2000, Notification.Position.BOTTOM_END);
+                Notification.show("Revoked " + secret.getKey(), 2000, Notification.Position.BOTTOM_END);
             });
-            deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_SMALL);
+            deleteBtn.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
             return deleteBtn;
-        }).setHeader("Actions");
+        }).setHeader("Actions").setAutoWidth(true);
 
-        // Form fields with explicit Bitwarden bypass
-        TextField keyField = new TextField("New Key");
+        // Control Entry Form Layout
+        TextField keyField = new TextField("Target Key Mapping");
+        keyField.setPlaceholder("e.g., production.db.password");
+        keyField.getStyle().set("flex-grow", "1");
         keyField.getElement().executeJs(
                 "this.inputElement.setAttribute('data-bwignore', 'true');"
                 + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
                 + "this.inputElement.setAttribute('autocomplete', 'new-password');"
         );
 
-        PasswordField valueField = new PasswordField("Secret Value");
+        PasswordField valueField = new PasswordField("Secret Plaintext Value");
+        valueField.setPlaceholder("••••••••••••");
+        valueField.getStyle().set("flex-grow", "1");
         valueField.getElement().executeJs(
                 "this.inputElement.setAttribute('data-bwignore', 'true');"
                 + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
                 + "this.inputElement.setAttribute('autocomplete', 'new-password');"
         );
 
-        Button saveButton = new Button("Encrypt & Save", e -> {
+        Button saveButton = new Button("Encrypt & Commit", e -> {
             if (!keyField.isEmpty() && !valueField.isEmpty()) {
                 try {
                     secretService.encryptAndSave(keyField.getValue(), valueField.getValue());
@@ -89,15 +119,10 @@ public class SecretsDashboard extends VerticalLayout implements BeforeEnterObser
         formLayout.addClassName("glass-panel");
         formLayout.setWidthFull();
         formLayout.setPadding(true);
-        formLayout.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
-        Button lockButton = new Button("Lock Vault", e -> {
-            sessionManager.lockVault();
-            getUI().ifPresent(ui -> ui.navigate("unlock"));
-        });
-        lockButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+        formLayout.setSpacing(true);
+        formLayout.setAlignItems(Alignment.BASELINE);
 
-        add(new HorizontalLayout(new H3("Active Secrets"), lockButton), grid, formLayout);
-        setSizeFull();
+        add(topBar, grid, formLayout);
     }
 
     private void refreshGrid() {

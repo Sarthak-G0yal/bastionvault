@@ -32,11 +32,31 @@ public class SetupView extends VerticalLayout implements BeforeEnterObserver {
         setAlignItems(Alignment.CENTER);
         setJustifyContentMode(JustifyContentMode.CENTER);
 
-        H2 title = new H2("Welcome to Bastion Vault");
-        Paragraph subtitle = new Paragraph("This is your first boot. Please configure your master credentials.");
+        // Root view spacing reset
+        setPadding(false);
+        setSpacing(false);
+
+        // Core Glassmorphic Container
+        VerticalLayout glassCard = new VerticalLayout();
+        glassCard.addClassName("glass-panel");
+        glassCard.setMaxWidth("450px");
+        glassCard.setPadding(true);
+        glassCard.setSpacing(true);
+        glassCard.setAlignItems(Alignment.CENTER);
+
+        H2 title = new H2("Initialize Bastion");
+        title.getStyle().set("margin-top", "0").set("margin-bottom", "var(--lumo-space-xs)");
+
+        Paragraph subtitle = new Paragraph("Configure your permanent master administrator credentials below.");
+        subtitle.getStyle()
+                .set("text-align", "center")
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("margin-bottom", "var(--lumo-space-m)");
 
         EmailField emailField = new EmailField("Administrator Email");
-        emailField.setWidth("300px");
+        emailField.setWidthFull();
+        emailField.setRequiredIndicatorVisible(true);
         emailField.getElement().executeJs(
                 "this.inputElement.setAttribute('data-bwignore', 'true');"
                 + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
@@ -44,16 +64,16 @@ public class SetupView extends VerticalLayout implements BeforeEnterObserver {
         );
 
         PasswordField passwordField = new PasswordField("Master Password");
-        passwordField.setWidth("300px");
+        passwordField.setWidthFull();
+        passwordField.setRequiredIndicatorVisible(true);
         passwordField.getElement().executeJs(
                 "this.inputElement.setAttribute('data-bwignore', 'true');"
                 + "this.inputElement.setAttribute('data-1p-ignore', 'true');"
                 + "this.inputElement.setAttribute('autocomplete', 'new-password');"
         );
 
-        Button saveButton = new Button("Initialize Vault", e -> {
+        Button saveButton = new Button("Deploy & Initialize Vault", e -> {
             if (!emailField.isEmpty() && !passwordField.isEmpty()) {
-                // Hash the password for login verification, save the profile
                 String hash = passwordEncoder.encode(passwordField.getValue());
                 AdminProfile profile = new AdminProfile(emailField.getValue(), hash);
                 adminRepository.save(profile);
@@ -64,15 +84,17 @@ public class SetupView extends VerticalLayout implements BeforeEnterObserver {
                 Notification.show("Please fill out all fields.", 3000, Notification.Position.MIDDLE);
             }
         });
+        saveButton.setWidthFull();
         saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_SUCCESS);
         saveButton.addClickShortcut(Key.ENTER);
+        saveButton.getStyle().set("margin-top", "var(--lumo-space-m)");
 
-        add(title, subtitle, emailField, passwordField, saveButton);
+        glassCard.add(title, subtitle, emailField, passwordField, saveButton);
+        add(glassCard);
     }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        // If the admin profile already exists, kick them out of the setup screen
         if (adminRepository.count() > 0) {
             event.forwardTo(UnlockView.class);
         }
