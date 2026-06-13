@@ -5,20 +5,14 @@ server:
 
 spring:
   application:
-    name: bastion-vault
-  
-  # MongoDB Connection
-  data:
-    mongodb:
-      uri: ${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/bastion}
-
-  # Vaadin Production / Development Mode settings
+    name: bastionvault
+  # THE FIX: Spring Boot 4.x uses 'spring.mongodb', NOT 'spring.data.mongodb'
+  mongodb:
+    uri: ${MONGO_URI:mongodb://localhost:27017/bastion}
+      
   vaadin:
     productionMode: false
 
-# Custom Application Security Properties
 vault:
-  # The salt used to turn your Master Password into an AES key
-  salt: ${VAULT_SALT}
-  # Pre-shared static token for stateless automation scripts (Terraform/Ansible)
-  deployment-token: ${VAULT_DEPLOYMENT_TOKEN}
+  salt: ${VAULT_SALT:local-dev-salt}
+  deployment-token: ${VAULT_DEPLOYMENT_TOKEN:local-dev-token}
