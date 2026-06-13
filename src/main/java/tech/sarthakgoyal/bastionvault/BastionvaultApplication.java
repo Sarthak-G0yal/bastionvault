@@ -61,8 +61,8 @@ public class BastionvaultApplication {
                     System.err.println("❌ Decryption failed!");
                 }
 
-                sessionManager.lockVault();
-                System.out.println("\n🔒 Vault Locked.");
+                // sessionManager.lockVault();
+                // System.out.println("\n🔒 Vault Locked.");
 
             } catch (Exception e) {
                 System.err.println("\n❌ TEST FAILED: " + e.getMessage());
@@ -72,7 +72,7 @@ public class BastionvaultApplication {
             System.out.println("===============================================\n");
 
             // Force the app to stop after the test so you don't have to hit Ctrl+C
-            System.exit(0);
+            // System.exit(0);
         };
     }
 }
