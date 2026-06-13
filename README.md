@@ -45,13 +45,18 @@ The easiest way to run Bastion Vault is via Docker Compose, which provisions bot
 **1. Create your `docker-compose.yml`:**
 
 ```yaml
-version: '3.8'
+
+networks:
+  bastion-net:
+    driver: bridge
 
 services:
   mongodb:
-    image: mongo:latest
+    image: mongo:7
     container_name: bastion-mongo
     restart: unless-stopped
+    networks:
+      - bastion-net
     volumes:
       - bastion-db-data:/data/db
     environment:
@@ -59,21 +64,23 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: secure-mongo-password-123
 
   bastion-vault:
-    image: yourgithubusername/bastion-vault:latest # Replace with your image
+    image: sarthakg0yal/bastionvault:latest
     container_name: bastion-vault
     restart: unless-stopped
     depends_on:
       - mongodb
+    networks:
+      - bastion-net
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATA_MONGODB_URI=mongodb://vault_admin:secure-mongo-password-123@mongodb:27017/bastion?authSource=admin
-      - VAULT_SALT=CHANGE_ME_TO_A_SECURE_SALT
-      - VAULT_DEPLOYMENT_TOKEN=CHANGE_ME_TO_A_SECURE_TOKEN
+      - VAULT_SALT=homelab-super-secret-salt
+      - VAULT_DEPLOYMENT_TOKEN=homelab-deploy-777
+      # This matches the new Spring Boot 4 mapping we set in application.yml
+      - MONGO_URI=mongodb://vault_admin:secure-mongo-password-123@bastion-mongo:27017/bastion?authSource=admin
 
 volumes:
   bastion-db-data:
-
 ```
 
 **2. Spin up the environment:**
@@ -157,5 +164,5 @@ resource "docker_container" "postgres" {
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
