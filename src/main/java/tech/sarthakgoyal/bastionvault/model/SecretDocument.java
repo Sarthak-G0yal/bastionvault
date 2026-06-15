@@ -12,10 +12,9 @@ public class SecretDocument {
     private String key;
     private String ciphertext;
     private String iv;
+    private String applicationGroup; // Added for Phase 1 Machine Identities
     private LocalDateTime lastUpdated;
 
-    // By ONLY having an empty constructor, Spring Data is forced to use the 
-    // exact field names and setters, preventing mapping mix-ups.
     public SecretDocument() {
     }
 
@@ -42,6 +41,14 @@ public class SecretDocument {
 
     public void setIv(String iv) {
         this.iv = iv;
+    }
+
+    public String getApplicationGroup() {
+        return applicationGroup;
+    }
+
+    public void setApplicationGroup(String applicationGroup) {
+        this.applicationGroup = applicationGroup;
     }
 
     public LocalDateTime getLastUpdated() {

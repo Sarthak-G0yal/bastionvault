@@ -22,7 +22,7 @@ public class SecurityConfig {
         this.tokenFilter = tokenFilter;
     }
 
-    // 1. THE API GUARD (Intercepts Terraform / Ansible API calls)
+    // 1. THE API GUARD
     @Bean
     @Order(1)
     public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
@@ -30,27 +30,25 @@ public class SecurityConfig {
                 .securityMatcher("/api/**")
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        // Permit machine clients to exchange IDs and Secrets for tokens openly
+                        .requestMatchers("/api/v1/auth/token").permitAll()
+                        .anyRequest().authenticated())
                 .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // 2. THE UI BYPASS (Lets Vaadin use its own internal CSRF and routing)
+    // 2. THE UI BYPASS
     @Bean
     @Order(2)
     public SecurityFilterChain uiFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/**")
-                // Disable Spring's CSRF so Vaadin's internal CSRF tokens can do their job
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
         return http.build();
     }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
 }
