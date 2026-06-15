@@ -7,10 +7,11 @@ import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
 // Notice the layout parameter here! It tells Vaadin to wrap this inside the sidebar.
 @Route(value = "", layout = MainLayout.class)
 @PageTitle("Secrets Dashboard | Bastion")
-public class SecretsDashboardView extends VerticalLayout {
+public class SecretsDashboardView extends VerticalLayout implements BeforeEnterObserver {
 
     private final SecretRepository secretRepository;
     private final VaultSessionManager sessionManager;
@@ -40,11 +41,6 @@ public class SecretsDashboardView extends VerticalLayout {
     public SecretsDashboardView(SecretRepository secretRepository, VaultSessionManager sessionManager) {
         this.secretRepository = secretRepository;
         this.sessionManager = sessionManager;
-
-        if (!sessionManager.isUnlocked()) {
-            getUI().ifPresent(ui -> ui.navigate("unlock"));
-            return;
-        }
 
         setSizeFull();
         add(new H2("Infrastructure Secrets"));
@@ -55,7 +51,11 @@ public class SecretsDashboardView extends VerticalLayout {
         // 2. The Grouped Accordion Display
         groupsAccordion.setWidthFull();
         add(groupsAccordion);
-        refreshAccordion();
+
+        // Only attempt to refresh the accordion if the vault is unlocked
+        if (sessionManager.isUnlocked()) {
+            refreshAccordion();
+        }
     }
 
     private FormLayout createAddSecretForm() {
@@ -106,13 +106,17 @@ public class SecretsDashboardView extends VerticalLayout {
             String encodedCiphertext = Base64.getEncoder().encodeToString(encrypted);
             String encodedIv = Base64.getEncoder().encodeToString(iv);
 
-            // Save to MongoDB
-            SecretDocument doc = new SecretDocument();
+            // THE FIX: Upsert Logic. Check if it exists in this exact group.
+            // If it does, grab it to overwrite. If not, create a new one.
+            SecretDocument doc = secretRepository.findByApplicationGroupAndKey(group, key)
+                    .orElse(new SecretDocument());
+
             doc.setKey(key);
             doc.setApplicationGroup(group);
             doc.setCiphertext(encodedCiphertext);
             doc.setIv(encodedIv);
             doc.setLastUpdated(LocalDateTime.now());
+
             secretRepository.save(doc);
 
             Notification.show("Secret encrypted and saved securely.");
@@ -151,5 +155,13 @@ public class SecretsDashboardView extends VerticalLayout {
 
             groupsAccordion.add(groupName + " (" + secretsList.size() + " keys)", grid);
         });
+    }
+
+    // THE FIX: Secure Routing Guard
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (!sessionManager.isUnlocked()) {
+            event.forwardTo(UnlockView.class);
+        }
     }
 }

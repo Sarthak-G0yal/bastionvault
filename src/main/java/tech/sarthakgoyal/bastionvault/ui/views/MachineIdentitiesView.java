@@ -13,6 +13,8 @@ import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,11 +30,12 @@ import java.util.Base64;
 
 @Route(value = "clients", layout = MainLayout.class)
 @PageTitle("Machine Identities | Bastion")
-public class MachineIdentitiesView extends VerticalLayout {
+public class MachineIdentitiesView extends VerticalLayout implements BeforeEnterObserver {
 
     private final ApiClientRepository clientRepository;
     private final AuditLogRepository auditRepository;
     private final PasswordEncoder passwordEncoder;
+    private final VaultSessionManager sessionManager;
 
     private final Grid<ApiClientDocument> clientGrid = new Grid<>(ApiClientDocument.class, false);
     private final Grid<AuditLogDocument> auditGrid = new Grid<>(AuditLogDocument.class, false);
@@ -42,12 +45,7 @@ public class MachineIdentitiesView extends VerticalLayout {
         this.clientRepository = clientRepository;
         this.auditRepository = auditRepository;
         this.passwordEncoder = passwordEncoder;
-
-        // Security Check: Kick them out if the vault is locked
-        if (!sessionManager.isUnlocked()) {
-            getUI().ifPresent(ui -> ui.navigate("unlock"));
-            return;
-        }
+        this.sessionManager = sessionManager;
 
         setSizeFull();
         setPadding(true);
@@ -70,7 +68,10 @@ public class MachineIdentitiesView extends VerticalLayout {
         setupAuditGrid();
         add(auditGrid);
 
-        refreshGrids();
+        // Only pull data if securely unlocked
+        if (sessionManager.isUnlocked()) {
+            refreshGrids();
+        }
     }
 
     private HorizontalLayout createToolbar() {
@@ -172,5 +173,13 @@ public class MachineIdentitiesView extends VerticalLayout {
         dialog.setCloseOnEsc(false);
         dialog.setCloseOnOutsideClick(false);
         dialog.open();
+    }
+
+    // THE FIX: Secure Routing Guard
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (!sessionManager.isUnlocked()) {
+            event.forwardTo(UnlockView.class);
+        }
     }
 }

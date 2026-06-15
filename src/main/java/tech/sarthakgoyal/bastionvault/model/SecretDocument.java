@@ -3,22 +3,34 @@ package tech.sarthakgoyal.bastionvault.model;
 import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "secrets")
+@CompoundIndex(name = "group_key_idx", def = "{'applicationGroup': 1, 'key': 1}", unique = true)
 public class SecretDocument {
 
     @Id
+    private String id;
+
     private String key;
     private String ciphertext;
     private String iv;
-    private String applicationGroup; // Added for Phase 1 Machine Identities
+    private String applicationGroup;
     private LocalDateTime lastUpdated;
 
     public SecretDocument() {
     }
 
     // Getters and Setters
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
     public String getKey() {
         return key;
     }

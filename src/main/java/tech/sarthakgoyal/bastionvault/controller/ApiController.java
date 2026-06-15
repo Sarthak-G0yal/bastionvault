@@ -55,18 +55,19 @@ public class ApiController {
         // Prevent cold-boot automated attacks: Vault must be unlocked by a human first
         if (!sessionManager.isUnlocked()) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body("Vault is locked. Human administration required.");
+                    .body(Map.of("error", "Vault is locked. Human administration required."));
         }
 
         Optional<ApiClientDocument> clientOpt = clientRepository.findById(request.clientId());
 
         if (clientOpt.isEmpty() || !clientOpt.get().isActive()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or inactive Client ID");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid or inactive Client ID"));
         }
 
         if (!passwordEncoder.matches(request.clientSecret(), clientOpt.get().getClientSecretHash())) {
             auditLogRepository.save(new AuditLogDocument(request.clientId(), "AUTH", "SYSTEM", "FAILED_BAD_SECRET"));
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid Client Secret");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid Client Secret"));
         }
 
         // Issue a 15-minute temporary token
@@ -113,15 +114,16 @@ public class ApiController {
     }
 
     // 3. THE GRANULAR SINGLE SECRET ENDPOINT
-    @GetMapping(value = "/secrets/{key}", produces = "application/json")
-    public ResponseEntity<?> getSingleSecret(@PathVariable String key) {
+    @GetMapping(value = "/secrets/{applicationGroup}/{key}", produces = "application/json")
+    public ResponseEntity<?> getSingleSecret(@PathVariable String applicationGroup, @PathVariable String key) {
         // Identify the machine client making the request
         String clientId = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        Optional<SecretDocument> secretOpt = secretRepository.findByKey(key);
+        Optional<SecretDocument> secretOpt = secretRepository.findByApplicationGroupAndKey(applicationGroup, key);
 
         if (secretOpt.isEmpty()) {
-            auditLogRepository.save(new AuditLogDocument(clientId, "READ_SECRET", key, "NOT_FOUND"));
+            auditLogRepository
+                    .save(new AuditLogDocument(clientId, "READ_SECRET", applicationGroup + ":" + key, "NOT_FOUND"));
             return ResponseEntity.notFound().build();
         }
 
@@ -131,7 +133,7 @@ public class ApiController {
         // Decrypt the payload in memory
         String decryptedValue = decryptValue(secret.getCiphertext(), secret.getIv(), activeKey);
 
-        auditLogRepository.save(new AuditLogDocument(clientId, "READ_SECRET", key, "SUCCESS"));
+        auditLogRepository.save(new AuditLogDocument(clientId, "READ_SECRET", applicationGroup + ":" + key, "SUCCESS"));
 
         // Return as a clean JSON object for easy parsing in automation scripts
         return ResponseEntity.ok(Map.of(
