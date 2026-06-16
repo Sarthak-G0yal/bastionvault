@@ -21,6 +21,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import java.util.Base64;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -42,8 +43,11 @@ public class ApiController {
         this.passwordEncoder = passwordEncoder;
     }
 
+    @Value("${vault.token-ttl-minutes:15}")
+    private int defaultTokenTtl;
+
     // DTOs for the JSON request/response
-    public record AuthRequest(String clientId, String clientSecret) {
+    public record AuthRequest(String clientId, String clientSecret, Integer expiresInMinutes) {
     }
 
     public record AuthResponse(String token, int expiresInMinutes) {
@@ -70,11 +74,11 @@ public class ApiController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid Client Secret"));
         }
 
-        // Issue a 15-minute temporary token
-        String token = sessionManager.generateTemporaryToken(request.clientId(), 15);
+        int ttl = (request.expiresInMinutes() != null) ? request.expiresInMinutes() : defaultTokenTtl;
+        String token = sessionManager.generateTemporaryToken(request.clientId(), ttl);
         auditLogRepository.save(new AuditLogDocument(request.clientId(), "AUTH", "SYSTEM", "SUCCESS"));
 
-        return ResponseEntity.ok(new AuthResponse(token, 15));
+        return ResponseEntity.ok(new AuthResponse(token, ttl));
     }
 
     // 2. THE BULK .ENV RETRIEVAL ENDPOINT

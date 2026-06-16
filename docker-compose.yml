@@ -29,6 +29,7 @@ services:
     environment:
       - VAULT_SALT=homelab-super-secret-salt
       - VAULT_DEPLOYMENT_TOKEN=homelab-deploy-777
+      - VAULT_TOKEN_TTL_MINUTES=0
       # This matches the new Spring Boot 4 mapping we set in application.yml
       - MONGO_URI=mongodb://vault_admin:secure-mongo-password-123@bastion-mongo:27017/bastion?authSource=admin
 

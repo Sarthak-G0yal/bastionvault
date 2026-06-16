@@ -11,7 +11,7 @@ Instead of leaving plain-text passwords in Terraform states, Ansible playbooks, 
 
 * **Zero-Knowledge Architecture:** Master passwords are never saved to the database. The AES-256 encryption key is derived dynamically in memory using PBKDF2 only when the vault is explicitly unlocked by an admin.
 * **Machine Identities:** Generate unique Client IDs and one-time Client Secrets for your deployment servers. Access can be monitored via the built-in Audit Log and revoked instantly.
-* **Short-Lived Automation Tokens:** Machines trade their credentials for temporary 15-minute bearer tokens, ensuring compromised deployment scripts cannot grant permanent access to your infrastructure.
+* **Automation Tokens:** Machines trade their credentials for temporary bearer tokens (defaulting to 15 minutes, with support for custom timers or non-expiring tokens), ensuring compromised deployment scripts cannot grant permanent access to your infrastructure.
 * **Bulk `.env` Streaming:** Group secrets by application (e.g., `vaultwarden`, `nextcloud`) and stream them directly into a `.env` format for instant Docker Compose deployments.
 * **Granular JSON API:** Fetch single, specific passwords dynamically during Terraform or Ansible runs.
 * **Premium Glassmorphic UI:** A purely Java-driven frontend built with Vaadin Flow, featuring a custom dark-mode Aura theme, interactive Accordions, and direct shadow-DOM protection against password manager interference.
@@ -36,6 +36,7 @@ The application relies on a few specific environment variables for its cryptogra
 | :--- | :--- | :--- |
 | `VAULT_SALT` | A static, highly secure string used to salt the PBKDF2 derivation function. Keep this safe and do not change it after initialization. | `homelab-super-secret-salt` |
 | `MONGO_URI` | The connection string for the backend MongoDB database. | `mongodb://user:pass@mongo:27017/bastion` |
+| `VAULT_TOKEN_TTL_MINUTES` | The default expiration time in minutes for API tokens. Set to `0` for non-expiring tokens. | `15` |
 
 ---
 
@@ -109,12 +110,11 @@ Bastion Vault requires machines to authenticate to receive a temporary token bef
 
 ### 1. Authenticate & Get Token
 
-Trade your Machine Client credentials for a 15-minute bearer token.
+Trade your Machine Client credentials for a bearer token (defaults to 15 minutes). You can optionally provide `expiresInMinutes` to request a custom expiration time, or specify `0` for a non-expiring token.
 
 ```bash
 curl -s -X POST http://<bastion-ip>:8080/api/v1/auth/token \
      -H "Content-Type: application/json" \
-     -d '{"clientId": "docker-runner-01", "clientSecret": "YOUR_COPIED_SECRET"}'
 ```
 
 **Response:**
@@ -122,7 +122,7 @@ curl -s -X POST http://<bastion-ip>:8080/api/v1/auth/token \
 ```json
 {
   "token": "eyJhb...long.random.string...",
-  "expiresInMinutes": 15
+  "expiresInMinutes": 60
 }
 ```
 

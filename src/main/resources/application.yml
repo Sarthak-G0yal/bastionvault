@@ -16,3 +16,4 @@ spring:
 vault:
   salt: ${VAULT_SALT:local-dev-salt}
   deployment-token: ${VAULT_DEPLOYMENT_TOKEN:local-dev-token}
+  token-ttl-minutes: ${VAULT_TOKEN_TTL_MINUTES:15}

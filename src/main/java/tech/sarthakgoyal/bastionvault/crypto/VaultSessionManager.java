@@ -36,10 +36,17 @@ public class VaultSessionManager {
 
         TokenMetadata(String clientId, int ttlMinutes) {
             this.clientId = clientId;
-            this.expiresAt = Instant.now().plusSeconds(ttlMinutes * 60L);
+            if (ttlMinutes <= 0) {
+                this.expiresAt = null;
+            } else {
+                this.expiresAt = Instant.now().plusSeconds(ttlMinutes * 60L);
+            }
         }
 
         boolean isExpired() {
+            if (this.expiresAt == null) {
+                return false;
+            }
             return Instant.now().isAfter(expiresAt);
         }
     }
