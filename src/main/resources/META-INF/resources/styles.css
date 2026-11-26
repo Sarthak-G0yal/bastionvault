@@ -77,3 +77,59 @@ vaadin-button[theme~="error"]:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(119, 47, 26, 0.6); 
 }
+/* =========================================
+   0.2 additions: header, text areas, badges
+   ========================================= */
+vaadin-text-area {
+    --vaadin-input-field-background: rgba(241, 233, 219, 0.05);
+    --vaadin-input-field-border-color: rgba(254, 116, 42, 0.3);
+}
+
+.app-header {
+    padding: 0 var(--lumo-space-m, 1rem);
+    gap: var(--lumo-space-m, 1rem);
+}
+
+.app-logo {
+    font-size: 1.15rem;
+    margin: 0;
+}
+
+.muted {
+    color: rgba(241, 233, 219, 0.6);
+    font-size: 0.9em;
+}
+
+/* Keys, tokens and revealed values */
+.mono textarea,
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+}
+
+.glass-panel {
+    padding: 1.25rem;
+}
+
+[theme~="badge"] {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+[theme~="badge"][theme~="success"] {
+    background: rgba(76, 175, 80, 0.2);
+    color: #9be29f;
+}
+
+[theme~="badge"][theme~="error"] {
+    background: rgba(254, 116, 42, 0.2);
+    color: #fe742a;
+}
+
+[theme~="badge"][theme~="contrast"] {
+    background: rgba(241, 233, 219, 0.12);
+    color: #f1e9db;
+}

@@ -1,8 +1,8 @@
 package tech.sarthakgoyal.bastionvault.repository;
 
-import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-import tech.sarthakgoyal.bastionvault.model.ApiClientDocument;
+import tech.sarthakgoyal.bastionvault.domain.ApiClient;
 
-public interface ApiClientRepository extends MongoRepository<ApiClientDocument, String> {
+public interface ApiClientRepository extends JpaRepository<ApiClient, String> {
 }

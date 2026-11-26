@@ -18,7 +18,9 @@ bin/
 
 # --- Build Tools ---
 .gradle/
-.mvn/
+# keep the Maven wrapper config so ./mvnw works in a fresh clone
+.mvn/*
+!.mvn/wrapper/
 
 # --- Environment & Secret Files ---
 .env
@@ -33,6 +35,13 @@ application-local.yml
 Thumbs.db
 
 # --- Vaadin Generated Files & Frontend Build ---
+# (Vaadin 24.4+ generates these in the project root)
+/package.json
+/package-lock.json
+/types.d.ts
+/vite.config.ts
+/vite.generated.ts
+/node_modules/
 src/main/frontend/generated
 src/main/frontend/node_modules
 src/main/frontend/package.json

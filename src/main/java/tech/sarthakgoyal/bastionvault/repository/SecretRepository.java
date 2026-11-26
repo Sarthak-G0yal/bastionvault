@@ -3,12 +3,16 @@ package tech.sarthakgoyal.bastionvault.repository;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-import tech.sarthakgoyal.bastionvault.model.SecretDocument;
+import tech.sarthakgoyal.bastionvault.domain.Secret;
 
-public interface SecretRepository extends MongoRepository<SecretDocument, String> {
-    List<SecretDocument> findByApplicationGroup(String applicationGroup);
+public interface SecretRepository extends JpaRepository<Secret, Long> {
+    Optional<Secret> findByGroupNameAndSecretKey(String groupName, String secretKey);
 
-    Optional<SecretDocument> findByApplicationGroupAndKey(String applicationGroup, String key);
+    List<Secret> findByGroupNameOrderBySecretKeyAsc(String groupName);
+
+    List<Secret> findAllByOrderByGroupNameAscSecretKeyAsc();
+
+    List<Secret> findByEncVersionLessThan(int encVersion);
 }

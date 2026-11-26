@@ -1,19 +1,61 @@
 server:
   port: 8080
   error:
-    include-message: always
+    include-message: never
+  # Resolve the real client IP from X-Forwarded-For, but only when the request comes from a
+  # trusted proxy (Traefik / the k3s node). Regex, matched against the TCP peer address.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: ${VAULT_TRUSTED_PROXIES:127\.0\.0\.1|0:0:0:0:0:0:0:1}
+  servlet:
+    session:
+      timeout: ${VAULT_SESSION_TIMEOUT:30m}
+      cookie:
+        http-only: true
+        same-site: strict
+        secure: ${VAULT_COOKIE_SECURE:false}
 
 spring:
   application:
     name: bastionvault
-  # THE FIX: Spring Boot 4.x uses 'spring.mongodb', NOT 'spring.data.mongodb'
-  mongodb:
-    uri: ${MONGO_URI:mongodb://localhost:27017/bastion}
-      
-  vaadin:
-    productionMode: false
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/bastionvault}
+    username: ${DB_USERNAME:bastionvault}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
 
 vault:
-  salt: ${VAULT_SALT:local-dev-salt}
-  deployment-token: ${VAULT_DEPLOYMENT_TOKEN:local-dev-token}
-  token-ttl-minutes: ${VAULT_TOKEN_TTL_MINUTES:15}
+  # PBKDF2-HMAC-SHA256 iterations for the master password (OWASP 2023+ guidance: 600k).
+  kdf-iterations: ${VAULT_KDF_ITERATIONS:600000}
+  # Leave empty to get a random one-time token in the log on first start.
+  setup-token: ${VAULT_SETUP_TOKEN:}
+  unseal:
+    key: ${VAULT_UNSEAL_KEY:}
+    key-file: ${VAULT_UNSEAL_KEY_FILE:}
+  token:
+    default-ttl-minutes: ${VAULT_TOKEN_TTL_MINUTES:15}
+    max-ttl-minutes: ${VAULT_TOKEN_MAX_TTL_MINUTES:60}
+  lockout:
+    max-failures: 5
+    ip-max-failures: 20
+    window: 15m
+    lock-duration: 15m
+  audit:
+    retention-days: ${VAULT_AUDIT_RETENTION_DAYS:90}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+# One JSON object per line (Elastic Common Schema) so Alloy/Loki can index audit fields.
+logging:
+  structured:
+    format:
+      console: ecs
