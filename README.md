@@ -1,208 +1,273 @@
+# BastionVault
 
-# Bastion Vault
+A small self-hosted secrets engine for homelab automation. You manage secrets in a web UI. Machines
+(External Secrets Operator, Ansible, Terraform, scripts) read them over a token-protected REST API.
+Every value is encrypted at rest with AES-256-GCM, and the key never touches the database.
 
-Bastion Vault is a self-hosted, cryptographically secure secrets engine engineered specifically for homelab environments. It bridges the gap between secure human administration and stateless machine-to-machine automation.
+**Stack:** Java 21 · Spring Boot 4.1 · Spring Security 7 · Vaadin 25 · PostgreSQL + Flyway
 
-Instead of leaving plain-text passwords in Terraform states, Ansible playbooks, or environment files, Bastion Vault stores your credentials using AES-256 encryption and serves them on the fly to authorized machines via short-lived, token-protected REST APIs.
-
----
-
-## Key Features
-
-* **Zero-Knowledge Architecture:** Master passwords are never saved to the database. The AES-256 encryption key is derived dynamically in memory using PBKDF2 only when the vault is explicitly unlocked by an admin.
-* **Machine Identities:** Generate unique Client IDs and one-time Client Secrets for your deployment servers. Access can be monitored via the built-in Audit Log and revoked instantly.
-* **Automation Tokens:** Machines trade their credentials for temporary bearer tokens (defaulting to 15 minutes, with support for custom timers or non-expiring tokens), ensuring compromised deployment scripts cannot grant permanent access to your infrastructure.
-* **Bulk `.env` Streaming:** Group secrets by application (e.g., `vaultwarden`, `nextcloud`) and stream them directly into a `.env` format for instant Docker Compose deployments.
-* **Granular JSON API:** Fetch single, specific passwords dynamically during Terraform or Ansible runs.
-* **Premium Glassmorphic UI:** A purely Java-driven frontend built with Vaadin Flow, featuring a custom dark-mode Aura theme, interactive Accordions, and direct shadow-DOM protection against password manager interference.
+> Upgrading from 0.1 (MongoDB)? See [Migrating from 0.1](#migrating-from-01). The security model
+> changed. [SECURITY.md](SECURITY.md) describes what is protected and what is not.
 
 ---
 
-## Tech Stack
+## How it works
 
-* **Backend:** Java 21, Spring Boot 4.1.0, Spring Security
-* **Frontend:** Vaadin Flow (Aura Theme, CSS Glassmorphism)
-* **Database:** MongoDB
-* **Cryptography:** `AES/CBC/PKCS5Padding`, `PBKDF2WithHmacSHA256`, `BCrypt`
-* **Deployment:** Docker, Docker Compose
+```
+                    ┌──────────── BastionVault ─────────────┐
+ Admin ─ login ───▶ │ UI (form login, session)               │
+       ─ unseal ──▶ │  master password │ recovery key        │──▶ data key (RAM only)
+ K8s Secret ──────▶ │  auto-unseal key (optional)            │          │
+                    │                                        │          ▼
+ ESO / Ansible ───▶ │ API (Bearer token or API key)          │   AES-256-GCM
+   / Terraform      │  └─ policy: which groups, read/write   │          │
+                    └────────────────────────────────────────┘          ▼
+                                                               PostgreSQL (ciphertext)
+```
+
+- **Sealed vs unsealed.** On start the vault is *sealed*: the data key is not in memory, so nothing
+  can be read or written. Unsealing loads it. Sealing (button, or restart) drops it.
+- **Login is not unseal.** Signing in to the UI needs your admin username and password. Unsealing
+  needs the **master password**, the **recovery key**, or the **auto-unseal key**. These are separate
+  secrets.
+- **Envelope encryption.** One random data key encrypts every secret. That key is stored only in
+  wrapped (encrypted) form, once per unseal method. Changing the master password or rotating a key
+  re-wraps the data key; secrets are never re-encrypted.
+- **Deny by default.** A machine client can only touch groups that one of its policy rules grants.
 
 ---
 
-## Environment Variables
+## Quick start (Docker Compose)
 
-The application relies on a few specific environment variables for its cryptographic engine and database connection.
+```bash
+cp .env.example .env              # set DB_PASSWORD
+docker compose up -d
+docker compose logs bastion-vault | grep "setup token"
+```
 
-| Variable | Description | Example |
+Open `http://<host>:8080/setup` and enter:
+
+1. the **setup token** from the log (stops anyone else from claiming a fresh instance; set your own
+   with `VAULT_SETUP_TOKEN`),
+2. an **admin username and login password**,
+3. a **master password** (different from the login password).
+
+You get a **recovery key** once. Store it offline (a password manager outside the homelab, plus
+paper). If you lose the master password *and* the recovery key, the data cannot be recovered.
+
+---
+
+## Concepts
+
+| Thing | What it is | Example |
 | :--- | :--- | :--- |
-| `VAULT_SALT` | A static, highly secure string used to salt the PBKDF2 derivation function. Keep this safe and do not change it after initialization. | `homelab-super-secret-salt` |
-| `MONGO_URI` | The connection string for the backend MongoDB database. | `mongodb://user:pass@mongo:27017/bastion` |
-| `VAULT_TOKEN_TTL_MINUTES` | The default expiration time in minutes for API tokens. Set to `0` for non-expiring tokens. | `15` |
+| **Group** | Namespace for related secrets, usually one per app | `affine`, `firefly3` |
+| **Key** | Name of one secret in a group | `DATABASE_URL`, `private.key` |
+| **Client** | A machine identity, with a client ID and secret | `external-secrets`, `ansible` |
+| **Policy rule** | Grants a client read and/or write on groups matching a glob (`*`, `?`) | `app-*` read |
+| **Session token** | `bvt_…`, from `POST /api/v1/auth/token`. 15 min default, 60 min max, kept in memory only | scripts, CI jobs |
+| **API key** | `bvk_<id>_<secret>`, long-lived, optional expiry, revocable, shows last use | External Secrets Operator |
+
+Names: groups `[A-Za-z0-9][A-Za-z0-9._-]*`, keys `[A-Za-z0-9_][A-Za-z0-9_.-]*`, client IDs lowercase.
+Values can be up to 64 KiB, multi-line included.
 
 ---
 
-## Deployment (Docker Compose)
+## API
 
-The easiest way to run Bastion Vault is via Docker Compose, which provisions both the application and a secure, isolated MongoDB instance.
+All endpoints are under `/api/v1`. Send credentials as `Authorization: Bearer <token-or-api-key>`.
+Errors are JSON: `{"error": "..."}`.
 
-**1. Create your `docker-compose.yml`:**
+| Method | Path | Needs | Returns |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/health` | nothing | `{"initialized","sealed","version"}`, always 200 |
+| `GET` | `/health/ready` | nothing | same, but **503 while sealed** |
+| `POST` | `/auth/token` | client ID + secret | `{"token","expiresInMinutes","expiresAt"}` |
+| `GET` | `/secrets/{group}/{key}` | read | `{"group","key","value"}` |
+| `PUT` | `/secrets/{group}/{key}` | write | `201` created / `204` updated. Body `{"value":"..."}` |
+| `DELETE` | `/secrets/{group}/{key}` | write | `204` |
+| `POST` | `/secrets/{group}/{key}/generate` | read + write | Creates a random value if missing (idempotent). Body `{"length":32}` |
+| `GET` | `/groups/{group}` | read | `{"KEY":"value",…}` |
+| `GET` | `/env/{group}` | read | `.env` text (see below) |
+
+| Status | Meaning |
+| :---: | :--- |
+| 400 | Invalid name or value, or `expiresInMinutes <= 0` |
+| 401 | Missing, wrong, expired or revoked credential |
+| 403 | Authenticated, but no policy rule allows it |
+| 404 | No such secret or group |
+| 429 | Locked out after too many failures (15 min) |
+| 503 | Vault is sealed |
+
+### Examples
+
+```bash
+BV=https://bastionvault.homelab118.home
+
+# Short-lived token (capped at VAULT_TOKEN_MAX_TTL_MINUTES)
+TOKEN=$(curl -s -X POST $BV/api/v1/auth/token -H 'Content-Type: application/json' \
+  -d '{"clientId":"ansible","clientSecret":"'"$BV_CLIENT_SECRET"'","expiresInMinutes":30}' | jq -r .token)
+
+curl -s -H "Authorization: Bearer $TOKEN" $BV/api/v1/secrets/postgres/ADMIN_PASSWORD | jq -r .value
+curl -s -H "Authorization: Bearer $TOKEN" $BV/api/v1/env/affine > .env
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"value":"s3cret"}' $BV/api/v1/secrets/affine/API_KEY
+```
+
+### `.env` format
+
+- `KEY='value'` when the value has no `'` or newline. Single quotes are literal, with no `$`
+  interpolation.
+- Otherwise `KEY="value"` with `\\ \" \$ \n \r` escaped.
+- Keys that are not valid variable names (like `private.key`) are left out and listed in a
+  trailing comment. Use the JSON endpoints for those.
+
+---
+
+## Integrations
+
+### Kubernetes: External Secrets Operator (webhook provider)
+
+Create a client `external-secrets` with a read rule for the groups it may sync, then create an API
+key for it. Store the key as a Kubernetes Secret (for example via SOPS), and point a
+`ClusterSecretStore` at it:
 
 ```yaml
-networks:
-  bastion-net:
-    driver: bridge
-
-services:
-  mongodb:
-    image: mongo:7
-    container_name: bastion-mongo
-    restart: unless-stopped
-    networks:
-      - bastion-net
-    volumes:
-      - bastion-db-data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: vault_admin
-      MONGO_INITDB_ROOT_PASSWORD: secure-mongo-password-123
-
-  bastion-vault:
-    image: sarthakg0yal/bastionvault:latest
-    container_name: bastion-vault
-    restart: unless-stopped
-    depends_on:
-      - mongodb
-    networks:
-      - bastion-net
-    ports:
-      - "8080:8080"
-    environment:
-      - VAULT_SALT=homelab-super-secret-salt
-      - MONGO_URI=mongodb://vault_admin:secure-mongo-password-123@bastion-mongo:27017/bastion?authSource=admin
-
-volumes:
-  bastion-db-data:
-```
-
-**2. Spin up the environment:**
-
-```bash
-docker compose up -d
-```
-
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: bastionvault
+spec:
+  provider:
+    webhook:
+      url: "http://bastionvault.bastionvault.svc:8080/api/v1/groups/{{ .remoteRef.key }}"
+      headers:
+        Authorization: "Bearer {{ print .auth.token }}"
+      result:
+        jsonPath: "$"
+      secrets:
+        - name: auth
+          secretRef:
+            name: bastionvault-eso
+            namespace: external-secrets
+            key: token
 ---
-
-## Initialization & UI Usage
-
-1. Open your browser and navigate to `http://<your-server-ip>:8080`.
-2. You will be automatically redirected to the **Setup Wizard** on your first boot.
-3. Provide an administrator email and a secure **Master Password**.
-* *Note: Your Master Password mathematically derives your AES encryption key. Do not lose it. Data recovery is impossible without it.*
-
-
-4. Unlock the vault to enter the dashboard.
-5. Go to **Machine Identities** to create an API Client (e.g., `docker-runner-01`) and copy the one-time Client Secret.
-6. Go to **Secrets Groups** to add encrypted secrets. Assign them to an **App Group** (e.g., `nexus`) to bundle them together.
-
----
-
-## API & Automation Integration
-
-Bastion Vault requires machines to authenticate to receive a temporary token before they can pull secrets.
-
-### 1. Authenticate & Get Token
-
-Trade your Machine Client credentials for a bearer token (defaults to 15 minutes). You can optionally provide `expiresInMinutes` to request a custom expiration time, or specify `0` for a non-expiring token.
-
-```bash
-curl -s -X POST http://<bastion-ip>:8080/api/v1/auth/token \
-     -H "Content-Type: application/json" \
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: affine-secret
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { kind: ClusterSecretStore, name: bastionvault }
+  target: { name: affine-secret }
+  dataFrom:
+    - extract: { key: affine }     # every key of group "affine" becomes a key of the Secret
 ```
 
-**Response:**
+While the vault is sealed, ESO keeps the Secrets it already synced, so running apps are unaffected.
+These manifests follow the ESO webhook provider docs but are not exercised by this repo's tests.
+Check them against your ESO version.
 
-```json
-{
-  "token": "eyJhb...long.random.string...",
-  "expiresInMinutes": 60
+### Ansible
+
+```yaml
+- name: Read the Postgres admin password from BastionVault
+  ansible.builtin.set_fact:
+    postgres_admin_password: >-
+      {{ (lookup('ansible.builtin.url', bv_url ~ '/api/v1/secrets/postgres/ADMIN_PASSWORD',
+          headers={'Authorization': 'Bearer ' ~ lookup('ansible.builtin.env', 'BV_API_KEY')},
+          split_lines=False) | from_json).value }}
+  no_log: true
+```
+
+### Terraform
+
+```hcl
+data "http" "db_password" {
+  url             = "https://bastionvault.homelab118.home/api/v1/secrets/postgres/ADMIN_PASSWORD"
+  request_headers = { Authorization = "Bearer ${var.bastionvault_api_key}" }
+}
+
+locals {
+  db_password = sensitive(jsondecode(data.http.db_password.response_body).value)
 }
 ```
 
-### 2. Stream an Environment Bundle (Bulk)
-
-Pass the token to download all secrets belonging to a specific Application Group (e.g., `nexus`), formatted perfectly for Docker Compose.
-
-```bash
-curl -s -H "Authorization: Bearer <YOUR_TOKEN>" \
-     http://<bastion-ip>:8080/api/v1/env/nexus > .env
-```
-
-**Resulting `.env` file:**
-
-```env
-DB_PASS=super-secure-database-password-123
-API_KEY=my-secret-key-999
-```
-
-### 3. Fetch a Single Secret (Granular)
-
-If your Terraform or Ansible script just needs one specific password, request it by its group and key.
-
-```bash
-curl -s -H "Authorization: Bearer <YOUR_TOKEN>" \
-     http://<bastion-ip>:8080/api/v1/secrets/nexus/DB_PASS
-```
-
-**Response:**
-
-```json
-{
-  "key": "DB_PASS",
-  "value": "super-secure-database-password-123"
-}
-```
+Data-source results are written to the Terraform state, so the state file still contains the
+value. Encrypt or protect the state accordingly.
 
 ---
 
-## Example: Secure Docker Deployment Script
+## Configuration
 
-This is how you use Bastion Vault to securely deploy applications on your homelab without ever storing passwords on the disk permanently.
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/bastionvault` | JDBC URL |
+| `DB_USERNAME` / `DB_PASSWORD` | `bastionvault` / *(empty)* | Database login. Flyway creates the schema. |
+| `VAULT_SETUP_TOKEN` | random, logged | One-time token required by `/setup` |
+| `VAULT_UNSEAL_KEY_FILE` | — | Path to the auto-unseal key (preferred: a mounted Secret) |
+| `VAULT_UNSEAL_KEY` | — | Auto-unseal key as an env var (if no file) |
+| `VAULT_TOKEN_TTL_MINUTES` | `15` | Default session-token lifetime |
+| `VAULT_TOKEN_MAX_TTL_MINUTES` | `60` | Hard cap. Longer requests are cut to this. |
+| `VAULT_KDF_ITERATIONS` | `600000` | PBKDF2-HMAC-SHA256 iterations for the master password |
+| `VAULT_SESSION_TIMEOUT` | `30m` | UI session idle timeout |
+| `VAULT_COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
+| `VAULT_TRUSTED_PROXIES` | `127\.0\.0\.1\|…` | Regex of proxy IPs allowed to set `X-Forwarded-For` |
+| `VAULT_AUDIT_RETENTION_DAYS` | `90` | Audit rows older than this are deleted daily |
+
+Lockout: 5 failures per user, client or unseal (20 per IP) within 15 minutes locks that key
+for 15 minutes.
+
+The `prod` profile (on in the Docker image) logs **one JSON object per line** (ECS). Audit events use
+the logger `bastionvault.audit`, with `audit.*` fields that Loki can index.
+
+### Auto-unseal
+
+*Settings → Auto-unseal → Generate new unseal key* shows a `bvu_…` key once. Save it as a
+Kubernetes Secret, mount it, and set `VAULT_UNSEAL_KEY_FILE`. On start the vault unseals itself. If
+the key is missing or was rotated, the vault stays sealed and you unseal it in the UI. Anyone who can
+read that Secret can unseal the vault, which is the trade-off for unattended restarts.
+
+---
+
+## Backup and recovery
+
+Back up **the PostgreSQL database** (`pg_dump`). The dump only holds ciphertext. To restore you need
+the dump plus **one of**: the master password, the recovery key, or the auto-unseal key. Keep at least
+two of them somewhere other than the machine that runs BastionVault.
+
+---
+
+## Migrating from 0.1
+
+0.1 stored AES-CBC values in MongoDB, with a key derived from the master password and `VAULT_SALT`.
+To move them:
+
+1. Deploy 0.2 against PostgreSQL and complete `/setup`.
+2. Export the old secrets:
+   `mongoexport --uri "$MONGO_URI" --collection secrets --jsonArray > secrets.json`
+3. In *Settings → Import from BastionVault 0.1*, paste the JSON and enter the old master password
+   and old `VAULT_SALT`. Each value is decrypted in memory and re-encrypted with AES-GCM.
+4. Recreate the machine clients. 0.1 clients had no policies, so each one now needs explicit rules.
+5. Delete `secrets.json` and retire the MongoDB instance.
+
+Removed in 0.2: `MONGO_URI`, `VAULT_SALT`, `VAULT_DEPLOYMENT_TOKEN`, and non-expiring tokens
+(`expiresInMinutes: 0`). Use API keys instead.
+
+---
+
+## Development
 
 ```bash
-#!/bin/bash
-
-# 1. Authenticate with BastionVault
-echo "Authenticating..."
-RESPONSE=$(curl -s -X POST http://<bastion-ip>:8080/api/v1/auth/token \
-     -H "Content-Type: application/json" \
-     -d '{"clientId": "docker-runner", "clientSecret": "my-client-secret"}')
-
-TOKEN=$(echo $RESPONSE | jq -r .token)
-
-# 2. Download the secure environment bundle
-echo "Pulling secrets..."
-curl -s -H "Authorization: Bearer $TOKEN" \
-     http://<bastion-ip>:8080/api/v1/env/nexus > .env
-
-# 3. Boot the application
-echo "Starting Nexus..."
-docker compose up -d
-
-# 4. Destroy the local plaintext secrets
-rm .env
-echo "Deployment complete and secrets wiped."
+./mvnw test                       # unit + integration (H2) + browserless UI tests
+./mvnw spring-boot:run            # needs PostgreSQL (DB_URL/DB_USERNAME/DB_PASSWORD)
+./mvnw -Pproduction package       # production jar with the compiled frontend
 ```
 
----
-
-## Security Architecture
-
-1. **Authentication:** Human UI login is verified against a `BCrypt` hash of the Master Password. Machine API access is verified using BCrypt-hashed Client Secrets.
-2. **Key Derivation:** Upon human login, the raw Master Password and the environment `VAULT_SALT` are fed into `PBKDF2WithHmacSHA256` (65,536 iterations) to derive a 256-bit AES key.
-3. **Data Encryption:** Secrets are encrypted via `AES/CBC/PKCS5Padding`. A unique Initialization Vector (IV) is generated for every individual secret payload.
-4. **Data Isolation:** Secrets are isolated via compound database indexes (`Group` + `Key`) to prevent cross-application collisions or accidental overwrites.
-5. **Storage:** Only the Base64-encoded Ciphertext and IVs are stored in MongoDB. The AES decryption key is held strictly in volatile application RAM and is immediately destroyed when the vault is locked.
-
----
+Releases: push a tag `vX.Y.Z`. CI runs the tests and publishes `sarthakg0yal/bastionvault:X.Y.Z` and
+`:X.Y`. This needs the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets. Pin a version in
+deployments instead of `latest`.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+MIT, see [LICENSE](LICENSE).

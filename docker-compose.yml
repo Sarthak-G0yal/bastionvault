@@ -1,37 +1,45 @@
-
-networks:
-  bastion-net:
-    driver: bridge
+# Local / single-host deployment: BastionVault + PostgreSQL.
+#   cp .env.example .env   # fill in, never commit .env
+#   docker compose up -d
+#   docker compose logs bastion-vault | grep "setup token"   # first start only
+#
+# In the homelab, BastionVault runs in Kubernetes against the shared PostgreSQL
+# server instead; this file is for development and for single-host setups.
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: bastion-mongo
+  postgres:
+    image: postgres:16
+    container_name: bastion-postgres
     restart: unless-stopped
-    networks:
-      - bastion-net
-    volumes:
-      - bastion-db-data:/data/db
     environment:
-      MONGO_INITDB_ROOT_USERNAME: vault_admin
-      MONGO_INITDB_ROOT_PASSWORD: secure-mongo-password-123
+      POSTGRES_DB: bastionvault
+      POSTGRES_USER: bastionvault
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - bastion-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bastionvault -d bastionvault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   bastion-vault:
-    image: sarthakg0yal/bastionvault:latest
+    image: sarthakg0yal/bastionvault:${BASTIONVAULT_VERSION:-latest}
     container_name: bastion-vault
     restart: unless-stopped
     depends_on:
-      - mongodb
-    networks:
-      - bastion-net
+      postgres:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      - VAULT_SALT=homelab-super-secret-salt
-      - VAULT_DEPLOYMENT_TOKEN=homelab-deploy-777
-      - VAULT_TOKEN_TTL_MINUTES=0
-      # This matches the new Spring Boot 4 mapping we set in application.yml
-      - MONGO_URI=mongodb://vault_admin:secure-mongo-password-123@bastion-mongo:27017/bastion?authSource=admin
+      DB_URL: jdbc:postgresql://postgres:5432/bastionvault
+      DB_USERNAME: bastionvault
+      DB_PASSWORD: ${DB_PASSWORD}
+      VAULT_COOKIE_SECURE: ${VAULT_COOKIE_SECURE:-false}
+      VAULT_TRUSTED_PROXIES: ${VAULT_TRUSTED_PROXIES:-127\.0\.0\.1}
+      # Optional auto-unseal: mount the key file and point at it.
+      VAULT_UNSEAL_KEY_FILE: ${VAULT_UNSEAL_KEY_FILE:-}
 
 volumes:
   bastion-db-data:

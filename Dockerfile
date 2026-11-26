@@ -1,27 +1,31 @@
 # ==========================================
-# STAGE 1: Build the Application
+# Stage 1: build (runs the tests too)
 # ==========================================
-FROM maven:3.9.6-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 
 COPY pom.xml .
-COPY src ./src
+RUN mvn -B -q dependency:go-offline -Pproduction
 
-# Build the Java app and compile the Vaadin frontend UI
-RUN mvn clean package -Pproduction -DskipTests
+COPY src ./src
+RUN mvn -B -Pproduction package
 
 # ==========================================
-# STAGE 2: Run the Application
+# Stage 2: runtime
 # ==========================================
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-RUN addgroup -S bastiongroup && adduser -S bastionuser -G bastiongroup
-USER bastionuser
+RUN addgroup -S bastion && adduser -S bastion -G bastion
+USER bastion
 
-COPY --from=build /build/target/*.jar bastion-vault.jar
+COPY --from=build /build/target/bastionvault-*.jar bastion-vault.jar
 
 EXPOSE 8080
 
-# Force Spring Boot into the 'prod' profile defined in application.yml
-ENTRYPOINT ["java", "-Dspring.profiles.active=prod", "-jar", "bastion-vault.jar"]   
+# 200 while the process is healthy, even when sealed (a sealed vault should not be restarted).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/api/v1/health >/dev/null || exit 1
+
+# Size the heap from the container memory limit instead of the host's RAM.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-Dspring.profiles.active=prod", "-jar", "bastion-vault.jar"]
