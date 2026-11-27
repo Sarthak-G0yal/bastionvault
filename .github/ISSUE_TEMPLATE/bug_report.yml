@@ -1,0 +1,49 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security problems go to a [private advisory](https://github.com/Sarthak-G0yal/bastionvault/security/advisories/new), not here.**
+        Never paste secret values, API keys, unseal or recovery keys, or your `.env` file.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Image tag or commit, and the value of `GET /api/v1/health`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Kubernetes
+        - Jar (./mvnw spring-boot:run)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a client with a read rule on `app-*`
+        2. Call GET /api/v1/groups/app-one
+        3. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log lines with tokens and values removed
+      render: text

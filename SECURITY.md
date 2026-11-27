@@ -54,6 +54,26 @@ To recover after losing the server you need the **PostgreSQL dump** and **one** 
 recovery key, auto-unseal key. Losing all three makes the data permanently unreadable. That is by
 design.
 
-## Reporting a problem
+## Supported versions
 
-Open a private security advisory on the GitHub repository rather than a public issue.
+| Version | Supported |
+| :--- | :--- |
+| 0.2.x | Yes |
+| 0.1.x | No. It stored values with AES-CBC in MongoDB and has known weaknesses. Upgrade with [Migrating from 0.1](README.md#migrating-from-01). |
+
+## Reporting a vulnerability
+
+Please do not open a public issue, discussion or pull request for a security problem.
+
+Report it privately through
+[GitHub security advisories](https://github.com/Sarthak-G0yal/bastionvault/security/advisories/new).
+Include the version, what an attacker can do, and the steps to reproduce. Leave out real secret
+values, keys and tokens.
+
+What to expect:
+
+- an acknowledgement within 7 days
+- a fix or a mitigation plan, shared with you before anything is published
+- credit in the advisory and the changelog, unless you prefer not to be named
+
+This is a personal project maintained in spare time, so there is no bug bounty.

@@ -1,13 +1,51 @@
-# BastionVault
+<p align="center">
+  <img src=".github/assets/logo.svg" width="72" height="72" alt="">
+</p>
 
-A small self-hosted secrets engine for homelab automation. You manage secrets in a web UI. Machines
-(External Secrets Operator, Ansible, Terraform, scripts) read them over a token-protected REST API.
-Every value is encrypted at rest with AES-256-GCM, and the key never touches the database.
+<h1 align="center">BastionVault</h1>
+
+<p align="center">
+  A small self-hosted secrets engine for homelab automation.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Sarthak-G0yal/bastionvault/actions/workflows/ci.yml"><img src="https://github.com/Sarthak-G0yal/bastionvault/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://hub.docker.com/r/sarthakg0yal/bastionvault"><img src="https://img.shields.io/docker/v/sarthakg0yal/bastionvault?sort=semver&label=docker" alt="Docker image"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/java-21-orange" alt="Java 21">
+</p>
+
+You manage secrets in a web UI. Machines (External Secrets Operator, Ansible, Terraform, scripts)
+read them over a token-protected REST API. Every value is encrypted at rest with AES-256-GCM, and
+the key never touches the database.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/screenshot-dark.png">
+  <img src=".github/assets/screenshot-light.png" alt="The Secrets page: counts of groups, secrets and clients, a chart of API reads over 14 days, recent machine access and the list of groups">
+</picture>
+
+## Features
+
+- **Encrypted at rest.** AES-256-GCM per value, envelope encryption, and a data key that lives only
+  in memory while the vault is unsealed.
+- **Three ways to unseal.** Master password, a one-time recovery key, or an optional auto-unseal key
+  for unattended restarts.
+- **Machine clients with policies.** Short-lived session tokens or long-lived API keys, and glob
+  rules (`app-*`) for read and write access. Deny by default.
+- **Fits existing tools.** `.env`, JSON and YAML import and export, plus examples for External
+  Secrets Operator, Ansible and Terraform.
+- **Audit log.** Every read, write, reveal, denial and failed login, in the database and as JSON
+  log lines that Loki can index.
+- **Brute-force lockout.** Per user, client, unseal and source IP.
+- **Self-contained UI.** Light and dark themes, and no assets loaded from the internet.
 
 **Stack:** Java 21 · Spring Boot 4.1 · Spring Security 7 · Vaadin 25 · PostgreSQL + Flyway
 
 > Upgrading from 0.1 (MongoDB)? See [Migrating from 0.1](#migrating-from-01). The security model
 > changed. [SECURITY.md](SECURITY.md) describes what is protected and what is not.
+>
+> The full documentation (guides, API reference, Kubernetes deployment, operations) is a VitePress
+> site on the [`docs` branch](https://github.com/Sarthak-G0yal/bastionvault/tree/docs/docs).
 
 ---
 
@@ -107,7 +145,7 @@ Errors are JSON: `{"error": "..."}`.
 ### Examples
 
 ```bash
-BV=https://bastionvault.homelab118.home
+BV=https://vault.example.lan
 
 # Short-lived token (capped at VAULT_TOKEN_MAX_TTL_MINUTES)
 TOKEN=$(curl -s -X POST $BV/api/v1/auth/token -H 'Content-Type: application/json' \
@@ -238,7 +276,7 @@ Check them against your ESO version.
 
 ```hcl
 data "http" "db_password" {
-  url             = "https://bastionvault.homelab118.home/api/v1/secrets/postgres/ADMIN_PASSWORD"
+  url             = "https://vault.example.lan/api/v1/secrets/postgres/ADMIN_PASSWORD"
   request_headers = { Authorization = "Bearer ${var.bastionvault_api_key}" }
 }
 
@@ -318,7 +356,7 @@ Removed in 0.2: `MONGO_URI`, `VAULT_SALT`, `VAULT_DEPLOYMENT_TOKEN`, and non-exp
 ./mvnw -Pproduction package       # production jar with the compiled frontend
 ```
 
-Releases: push a tag `vX.Y.Z`. CI runs the tests and publishes `sarthakg0yal/bastionvault:X.Y.Z` and
+Releases: update [CHANGELOG.md](CHANGELOG.md), then push a tag `vX.Y.Z`. CI runs the tests and publishes `sarthakg0yal/bastionvault:X.Y.Z` and
 `:X.Y`. This needs the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets. Pin a version in
 deployments instead of `latest`.
 

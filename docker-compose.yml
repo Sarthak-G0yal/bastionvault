@@ -24,7 +24,7 @@ services:
       retries: 5
 
   bastion-vault:
-    image: sarthakg0yal/bastionvault:${BASTIONVAULT_VERSION:-latest}
+    image: sarthakg0yal/bastionvault:${BASTIONVAULT_VERSION:-0.2}
     container_name: bastion-vault
     restart: unless-stopped
     depends_on:

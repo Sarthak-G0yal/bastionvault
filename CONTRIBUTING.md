@@ -97,7 +97,8 @@ the internet.
 
 ## Releases
 
-Maintainers release by pushing a tag `vX.Y.Z`. CI runs the tests and publishes the Docker image
+Maintainers move the `Unreleased` entries in [CHANGELOG.md](CHANGELOG.md) under the new version,
+then push a tag `vX.Y.Z`. CI runs the tests and publishes the Docker image
 `sarthakg0yal/bastionvault:X.Y.Z` and `:X.Y`.
 
 ## License

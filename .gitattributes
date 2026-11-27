@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+mvnw text eol=lf
+
+*.png binary
+*.woff2 binary
+*.jar binary
+
+# Vaadin's precompiled frontend bundle: keep it out of diffs and language stats
+src/main/bundles/dev.bundle binary linguist-generated
