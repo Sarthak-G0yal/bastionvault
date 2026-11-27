@@ -146,6 +146,25 @@ class VaultIntegrationTest {
     }
 
     @Test
+    void malformedNamesAreRejectedBeforeThePolicyCheck() throws Exception {
+        String auth = "Bearer " + clientToken(unique("names"), "*", true, true);
+        String longGroup = "a".repeat(300);
+        mvc.perform(get("/api/v1/groups/" + longGroup).header("Authorization", auth))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/secrets/ok/" + "k".repeat(300)).header("Authorization", auth))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/secrets/-bad/KEY").header("Authorization", auth))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void oversizedClientIdIsStillAuditedAsAFailure() throws Exception {
+        String body = "{\"clientId\":\"" + "x".repeat(5000) + "\",\"clientSecret\":\"wrong\"}";
+        mvc.perform(post("/api/v1/auth/token").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void readRuleAllowsReadButNotWrite() throws Exception {
         secrets.put("app-one", "DB_PASS", "p@ss$word", "test");
         secrets.put("other", "DB_PASS", "nope", "test");

@@ -63,13 +63,14 @@ public class SetupService {
     @Transactional
     public String initialize(String token, String username, String loginPassword, String masterPassword) {
         String ipKey = AttemptLimiter.ip(ClientIp.current());
-        limiter.assertAllowed("setup", ipKey);
+        limiter.begin("setup", ipKey);
+        boolean tokenOk = token != null && MessageDigest.isEqual(token.trim().getBytes(StandardCharsets.UTF_8),
+                setupToken.getBytes(StandardCharsets.UTF_8));
+        limiter.end(tokenOk, "setup", ipKey);
         if (isInitialized()) {
             throw new IllegalStateException("Vault is already initialized");
         }
-        if (token == null || !MessageDigest.isEqual(token.trim().getBytes(StandardCharsets.UTF_8),
-                setupToken.getBytes(StandardCharsets.UTF_8))) {
-            limiter.recordFailure("setup", ipKey);
+        if (!tokenOk) {
             audit.record(tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType.ANONYMOUS, "anonymous",
                     "SETUP", null, Outcome.DENIED, "bad setup token");
             throw new IllegalArgumentException("Invalid setup token");

@@ -52,13 +52,17 @@ public class UnsealService {
     /** Re-checks the master password for sensitive settings changes, with the same lockout as unseal. */
     public boolean verifyPassword(String admin, String masterPassword) {
         String ipKey = AttemptLimiter.ip(ClientIp.current());
-        limiter.assertAllowed(UNSEAL_KEY, ipKey);
-        if (keys.verifyPassword(masterPassword.toCharArray())) {
-            return true;
+        limiter.begin(UNSEAL_KEY, ipKey);
+        boolean ok = false;
+        try {
+            ok = keys.verifyPassword(masterPassword.toCharArray());
+        } finally {
+            limiter.end(ok, UNSEAL_KEY, ipKey);
         }
-        limiter.recordFailure(UNSEAL_KEY, ipKey);
-        audit.admin(admin, "VERIFY_MASTER_PASSWORD", null, Outcome.FAILED);
-        return false;
+        if (!ok) {
+            audit.admin(admin, "VERIFY_MASTER_PASSWORD", null, Outcome.FAILED);
+        }
+        return ok;
     }
 
     public void seal(String admin) {
@@ -68,16 +72,22 @@ public class UnsealService {
 
     private boolean attempt(String admin, String method, java.util.function.BooleanSupplier unseal) {
         String ipKey = AttemptLimiter.ip(ClientIp.current());
-        limiter.assertAllowed(UNSEAL_KEY, ipKey);
-        if (!keys.isSealed()) {
-            return true;
+        limiter.begin(UNSEAL_KEY, ipKey);
+        boolean ok = false;
+        try {
+            if (!keys.isSealed()) {
+                ok = true;
+                return true;
+            }
+            ok = unseal.getAsBoolean();
+        } finally {
+            limiter.end(ok, UNSEAL_KEY, ipKey);
         }
-        if (unseal.getAsBoolean()) {
+        if (ok) {
             limiter.reset(UNSEAL_KEY);
             audit.admin(admin, "UNSEAL", method, Outcome.SUCCESS);
             return true;
         }
-        limiter.recordFailure(UNSEAL_KEY, ipKey);
         audit.admin(admin, "UNSEAL", method, Outcome.FAILED);
         return false;
     }

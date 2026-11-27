@@ -277,7 +277,7 @@ the logger `bastionvault.audit`, with `audit.*` fields that Loki can index.
 
 ### Auto-unseal
 
-*Settings → Auto-unseal → Generate new unseal key* shows a `bvu_…` key once. Save it as a
+*Settings → Auto-unseal*: enter the current master password, then *Generate unseal key* shows a `bvu_…` key once. Save it as a
 Kubernetes Secret, mount it, and set `VAULT_UNSEAL_KEY_FILE`. On start the vault unseals itself. If
 the key is missing or was rotated, the vault stays sealed and you unseal it in the UI. Anyone who can
 read that Secret can unseal the vault, which is the trade-off for unattended restarts.

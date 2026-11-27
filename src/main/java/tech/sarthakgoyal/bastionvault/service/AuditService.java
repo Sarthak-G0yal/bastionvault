@@ -39,7 +39,12 @@ public class AuditService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(ActorType actorType, String actor, String action, String target, Outcome outcome,
             String detail) {
-        String ip = ClientIp.current();
+        // Bound caller-supplied text to the column sizes, so an oversized client ID or path cannot make
+        // the insert fail and drop the audit row. Control characters are removed for the text log.
+        actor = clip(actor, 128);
+        target = clip(target, 256);
+        detail = clip(detail, 512);
+        String ip = clip(ClientIp.current(), 64);
         AUDIT_LOG.atInfo()
                 .addKeyValue("audit.actor_type", actorType.name())
                 .addKeyValue("audit.actor", actor)
@@ -49,6 +54,14 @@ public class AuditService {
                 .addKeyValue("audit.source_ip", ip)
                 .log("{} {} {} -> {}", actor, action, target == null ? "-" : target, outcome);
         repository.save(new AuditEvent(actorType, actor, action, target, outcome, ip, detail));
+    }
+
+    static String clip(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        String clean = value.replaceAll("\\p{Cntrl}", "?");
+        return clean.length() <= max ? clean : clean.substring(0, max - 1) + "…";
     }
 
     public void admin(String admin, String action, String target, Outcome outcome) {

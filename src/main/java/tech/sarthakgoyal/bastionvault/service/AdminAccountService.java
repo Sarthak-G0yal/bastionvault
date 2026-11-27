@@ -21,11 +21,14 @@ public class AdminAccountService implements UserDetailsService {
     private final AdminUserRepository admins;
     private final PasswordEncoder passwordEncoder;
     private final AuditService audit;
+    private final AttemptLimiter limiter;
 
-    public AdminAccountService(AdminUserRepository admins, PasswordEncoder passwordEncoder, AuditService audit) {
+    public AdminAccountService(AdminUserRepository admins, PasswordEncoder passwordEncoder, AuditService audit,
+            AttemptLimiter limiter) {
         this.admins = admins;
         this.passwordEncoder = passwordEncoder;
         this.audit = audit;
+        this.limiter = limiter;
     }
 
     @Override
@@ -51,7 +54,17 @@ public class AdminAccountService implements UserDetailsService {
     public void changePassword(String username, String currentPassword, String newPassword) {
         AdminUser admin = admins.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("Unknown user"));
-        if (!passwordEncoder.matches(currentPassword, admin.getPasswordHash())) {
+        // Same lockout as sign-in, so a hijacked session cannot brute-force the current password here.
+        String userKey = "admin:" + username;
+        String ipKey = AttemptLimiter.ip(ClientIp.current());
+        limiter.begin(userKey, ipKey);
+        boolean ok = false;
+        try {
+            ok = currentPassword != null && passwordEncoder.matches(currentPassword, admin.getPasswordHash());
+        } finally {
+            limiter.end(ok, userKey, ipKey);
+        }
+        if (!ok) {
             audit.admin(username, "CHANGE_LOGIN_PASSWORD", username, Outcome.DENIED);
             throw new IllegalArgumentException("Current password is wrong");
         }

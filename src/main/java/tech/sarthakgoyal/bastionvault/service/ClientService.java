@@ -87,15 +87,34 @@ public class ClientService {
         return clients.findAll();
     }
 
-    /** Verifies a client secret (BCrypt). Inactive clients never authenticate. */
+    /**
+     * Verifies a client secret (BCrypt). Inactive clients never authenticate. Unknown and inactive
+     * clients still cost one BCrypt check, so response time does not reveal which client IDs exist.
+     */
     public boolean verifySecret(String clientId, String secret) {
         if (clientId == null || secret == null) {
             return false;
         }
-        return clients.findById(clientId)
-                .filter(ApiClient::isActive)
-                .map(c -> passwordEncoder.matches(secret, c.getSecretHash()))
-                .orElse(false);
+        Optional<ApiClient> client = clients.findById(clientId).filter(ApiClient::isActive);
+        String hash = client.map(ApiClient::getSecretHash).orElseGet(this::dummyHash);
+        boolean matches;
+        try {
+            matches = passwordEncoder.matches(secret, hash);
+        } catch (IllegalArgumentException e) { // BCrypt refuses passwords over 72 bytes
+            return false;
+        }
+        return client.isPresent() && matches;
+    }
+
+    private volatile String dummyHash;
+
+    private String dummyHash() {
+        String hash = dummyHash;
+        if (hash == null) {
+            hash = passwordEncoder.encode(randomSecret());
+            dummyHash = hash;
+        }
+        return hash;
     }
 
     // ---------------------------------------------------------------- API keys

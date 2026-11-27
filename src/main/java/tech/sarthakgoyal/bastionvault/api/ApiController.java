@@ -25,6 +25,7 @@ import tech.sarthakgoyal.bastionvault.service.AuditService;
 import tech.sarthakgoyal.bastionvault.service.ClientIp;
 import tech.sarthakgoyal.bastionvault.service.ClientService;
 import tech.sarthakgoyal.bastionvault.service.EnvFormatter;
+import tech.sarthakgoyal.bastionvault.service.Names;
 import tech.sarthakgoyal.bastionvault.service.SecretCodec;
 import tech.sarthakgoyal.bastionvault.service.SecretFormat;
 import tech.sarthakgoyal.bastionvault.service.SecretImportService;
@@ -101,9 +102,14 @@ public class ApiController {
         }
         String clientKey = "client:" + request.clientId();
         String ipKey = AttemptLimiter.ip(ClientIp.current());
-        limiter.assertAllowed(clientKey, ipKey);
-        if (!clients.verifySecret(request.clientId(), request.clientSecret())) {
-            limiter.recordFailure(clientKey, ipKey);
+        limiter.begin(clientKey, ipKey);
+        boolean ok = false;
+        try {
+            ok = clients.verifySecret(request.clientId(), request.clientSecret());
+        } finally {
+            limiter.end(ok, clientKey, ipKey);
+        }
+        if (!ok) {
             audit.client(String.valueOf(request.clientId()), "AUTH", null, Outcome.FAILED);
             return ApiErrors.error(HttpStatus.UNAUTHORIZED, "Invalid client credentials");
         }
@@ -282,6 +288,11 @@ public class ApiController {
     }
 
     private void authorize(String client, String action, String group, String key, Capability capability) {
+        // Reject malformed names (400) before they reach the policy matcher or the audit log.
+        Names.group(group);
+        if (key != null) {
+            Names.key(key);
+        }
         try {
             policies.require(client, group, capability);
         } catch (PolicyDeniedException e) {

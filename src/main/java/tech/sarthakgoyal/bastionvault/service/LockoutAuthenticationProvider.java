@@ -34,21 +34,27 @@ public class LockoutAuthenticationProvider extends DaoAuthenticationProvider {
         String userKey = "admin:" + username;
         String ipKey = AttemptLimiter.ip(ip);
         try {
-            limiter.assertAllowed(userKey, ipKey);
+            limiter.begin(userKey, ipKey);
         } catch (TooManyAttemptsException e) {
             audit.record(ActorType.ANONYMOUS, username, "LOGIN", null, Outcome.DENIED, "locked out");
             throw new LockedException("Too many failed attempts. Try again later.");
         }
+        boolean success = false;
         try {
             Authentication result = super.authenticate(authentication);
-            limiter.reset(userKey);
+            success = true;
             accounts.recordLogin(username);
             audit.admin(username, "LOGIN", null, Outcome.SUCCESS);
             return result;
         } catch (BadCredentialsException e) {
-            limiter.recordFailure(userKey, ipKey);
             audit.record(ActorType.ANONYMOUS, username, "LOGIN", null, Outcome.FAILED, null);
             throw e;
+        } finally {
+            // Anything but a successful login (wrong password, disabled account) counts as a failure.
+            limiter.end(success, userKey, ipKey);
+            if (success) {
+                limiter.reset(userKey);
+            }
         }
     }
 }

@@ -137,21 +137,36 @@ public class SettingsView extends Div {
     }
 
     private Div autoUnsealSection() {
-        Button enable = UiSupport.secondary("Generate unseal key", "key-round", e -> confirm(
-                "Generate a new unseal key?",
-                "Any previous unseal key stops working. Update the Kubernetes Secret before the next restart.", () -> {
-                    String key = keys.enableAutoUnseal();
-                    audit.admin(admin(), "ENABLE_AUTO_UNSEAL", null, Outcome.SUCCESS);
-                    updateStatus();
-                    UiSupport.showOnce("Unseal key",
-                            "Store it as a Kubernetes Secret file and point VAULT_UNSEAL_KEY_FILE at it.", key, null);
-                }));
-        Button disable = new Button("Turn off", e -> confirm("Turn off auto-unseal?",
-                "After the next restart the vault stays sealed until you unseal it here.", () -> {
-                    keys.disableAutoUnseal();
-                    audit.admin(admin(), "DISABLE_AUTO_UNSEAL", null, Outcome.SUCCESS);
-                    updateStatus();
-                }));
+        // An unseal key is as powerful as the master password, so minting or removing one needs the master
+        // password, not just a signed-in session.
+        PasswordField master = password("Current master password");
+        master.setId("auto-unseal-master");
+        Button enable = UiSupport.secondary("Generate unseal key", "key-round", e -> {
+            if (!checkMaster(master)) {
+                return;
+            }
+            confirm("Generate a new unseal key?",
+                    "Any previous unseal key stops working. Update the Kubernetes Secret before the next restart.",
+                    () -> {
+                        String key = keys.enableAutoUnseal();
+                        audit.admin(admin(), "ENABLE_AUTO_UNSEAL", null, Outcome.SUCCESS);
+                        updateStatus();
+                        UiSupport.showOnce("Unseal key",
+                                "Store it as a Kubernetes Secret file and point VAULT_UNSEAL_KEY_FILE at it.", key,
+                                null);
+                    });
+        });
+        Button disable = new Button("Turn off", e -> {
+            if (!checkMaster(master)) {
+                return;
+            }
+            confirm("Turn off auto-unseal?",
+                    "After the next restart the vault stays sealed until you unseal it here.", () -> {
+                        keys.disableAutoUnseal();
+                        audit.admin(admin(), "DISABLE_AUTO_UNSEAL", null, Outcome.SUCCESS);
+                        updateStatus();
+                    });
+        });
         disable.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
         Span label = new Span("Status");
         label.addClassName("muted");
@@ -159,7 +174,7 @@ public class SettingsView extends Div {
                 "Unseals the vault on start from VAULT_UNSEAL_KEY_FILE, a mounted Kubernetes Secret kept in git with "
                         + "SOPS. Anyone who controls the cluster can then read the vault. The master password and "
                         + "recovery key keep working.",
-                row(label, autoUnsealStatus), row(enable, disable));
+                row(label, autoUnsealStatus), master, row(enable, disable));
     }
 
     private Div recoverySection() {

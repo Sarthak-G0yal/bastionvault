@@ -26,6 +26,54 @@ class ServiceUnitTest {
         assertThat(GlobMatcher.matches("affine", "affine2")).isFalse();
         assertThat(GlobMatcher.matches("db?", "db1")).isTrue();
         assertThat(GlobMatcher.matches("a.b", "aXb")).as("dot is literal").isFalse();
+        assertThat(GlobMatcher.matches("*-db", "app-db")).isTrue();
+        assertThat(GlobMatcher.matches("a*b*c", "aXXbYYc")).isTrue();
+        assertThat(GlobMatcher.matches("a*b*c", "aXXbYY")).isFalse();
+        assertThat(GlobMatcher.matches("**", "")).isTrue();
+        assertThat(GlobMatcher.matches("?", "")).isFalse();
+    }
+
+    @Test
+    void globMatchingHasNoCatastrophicBacktracking() {
+        String pattern = "a*".repeat(60) + "b";   // 121 characters, allowed by Names.groupPattern
+        String value = "a".repeat(128);           // the longest valid group name
+        long start = System.nanoTime();
+        assertThat(GlobMatcher.matches(pattern, value)).isFalse();
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(1));
+    }
+
+    @Test
+    void parallelAttemptsCannotExceedTheLimit() {
+        AttemptLimiter limiter = new AttemptLimiter(
+                new VaultProperties.Lockout(3, 10, Duration.ofMinutes(15), Duration.ofMinutes(15)), new MutableClock());
+        // three slow checks start at once and none has finished yet
+        limiter.begin("unseal");
+        limiter.begin("unseal");
+        limiter.begin("unseal");
+        assertThatThrownBy(() -> limiter.begin("unseal")).isInstanceOf(TooManyAttemptsException.class);
+        limiter.end(false, "unseal");
+        limiter.end(false, "unseal");
+        limiter.end(false, "unseal");
+        assertThatThrownBy(() -> limiter.begin("unseal")).as("locked after 3 failures")
+                .isInstanceOf(TooManyAttemptsException.class);
+    }
+
+    @Test
+    void successfulAttemptsDoNotCount() {
+        AttemptLimiter limiter = new AttemptLimiter(
+                new VaultProperties.Lockout(3, 10, Duration.ofMinutes(15), Duration.ofMinutes(15)), new MutableClock());
+        for (int i = 0; i < 10; i++) {
+            limiter.begin("admin:bob", "ip:1.2.3.4");
+            limiter.end(true, "admin:bob", "ip:1.2.3.4");
+        }
+        limiter.begin("admin:bob", "ip:1.2.3.4");
+    }
+
+    @Test
+    void auditFieldsAreBounded() {
+        assertThat(AuditService.clip("x".repeat(500), 128)).hasSize(128);
+        assertThat(AuditService.clip("a\nb\rc", 128)).isEqualTo("a?b?c");
+        assertThat(AuditService.clip(null, 10)).isNull();
     }
 
     @Test

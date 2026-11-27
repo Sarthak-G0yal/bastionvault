@@ -158,6 +158,15 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     @Test
     void enableAutoUnsealFromSettings() {
         navigate(SettingsView.class);
+        // a signed-in session alone cannot mint an unseal key
+        test(button("Generate unseal key")).click();
+        assertThat($(ConfirmDialog.class).all()).noneMatch(ConfirmDialog::isOpened);
+        $(PasswordField.class).id("auto-unseal-master").setValue("not-the-master-password");
+        test(button("Generate unseal key")).click();
+        assertThat($(ConfirmDialog.class).all()).noneMatch(ConfirmDialog::isOpened);
+        assertThat(keys.hasAutoUnseal()).isFalse();
+
+        $(PasswordField.class).id("auto-unseal-master").setValue(TestFixtures.MASTER);
         test(button("Generate unseal key")).click();
         test($(ConfirmDialog.class).first()).confirm();
         assertThat(keys.hasAutoUnseal()).isTrue();
