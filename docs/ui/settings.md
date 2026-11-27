@@ -29,10 +29,11 @@ Lets the vault unseal itself on start by reading a key file. See [Auto-unseal](/
 | Control | Effect |
 | :--- | :--- |
 | **Status** | **On** when an auto-unseal key exists |
-| **Generate unseal key** | Asks for confirmation, then shows a new `bvu_…` key once. Any previous unseal key stops working. Update the Kubernetes Secret before the next restart. |
-| **Turn off** | Deletes the wrapped copy for the unseal key. After the next restart the vault stays sealed until someone unseals it in the UI. |
+| **Current master password** | Required by both buttons below |
+| **Generate unseal key** | Checks the master password, asks for confirmation, then shows a new `bvu_…` key once. Any previous unseal key stops working. Update the Kubernetes Secret before the next restart. |
+| **Turn off** | Checks the master password, then deletes the wrapped copy for the unseal key. After the next restart the vault stays sealed until someone unseals it in the UI. |
 
-The master password and recovery key keep working either way.
+An unseal key is as powerful as the master password, so a signed-in session alone cannot create or remove one. Wrong master passwords count toward the unseal lockout. The master password and recovery key keep working either way.
 
 ::: warning Trade-off
 Anyone who can read the unseal key (for example, anyone with access to that Kubernetes Secret) can unseal the vault. You get unattended restarts in exchange.

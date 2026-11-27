@@ -17,7 +17,7 @@ External Secrets Operator keeps already-synced Secrets while the vault is sealed
 
 ## Turn it on
 
-1. **Settings → Auto-unseal → Generate unseal key**, then confirm.
+1. **Settings → Auto-unseal**: enter the current master password, click **Generate unseal key**, then confirm.
 2. Copy the `bvu_…` key. It is shown once.
 3. Store it where the pod can read it as a file:
 
