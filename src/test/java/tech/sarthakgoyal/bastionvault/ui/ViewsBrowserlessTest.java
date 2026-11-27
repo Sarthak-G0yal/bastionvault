@@ -90,6 +90,27 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     }
 
     @Test
+    void importEnvFileThroughTheDialog() {
+        secrets.put("ui-env", "KEEP", "original", "test");
+        navigate(SecretsView.class);
+        test(button("Import .env")).click();
+        Dialog dialog = $(Dialog.class).first();
+        $(TextField.class, dialog).withCaption("Group").single().setValue("ui-env");
+        String env = "KEEP=changed\nNEW_ONE=hello\nexport SECOND=\"two words\"\n";
+        test($(com.vaadin.flow.component.upload.Upload.class, dialog).single())
+                .upload("app.env", "text/plain", env.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        assertThat(test($(Grid.class, dialog).single()).size()).isEqualTo(3);
+        Button importButton = $(Button.class, dialog).withCaptionContaining("Import ").single();
+        assertThat(importButton.getText()).isEqualTo("Import 2 secrets"); // KEEP is skipped by default
+        test(importButton).click();
+
+        assertThat(secrets.get("ui-env", "NEW_ONE")).contains("hello");
+        assertThat(secrets.get("ui-env", "SECOND")).contains("two words");
+        assertThat(secrets.get("ui-env", "KEEP")).contains("original");
+    }
+
+    @Test
     void createClientShowsTheSecretOnce() {
         navigate(ClientsView.class);
         $(TextField.class).withCaption("Client ID").single().setValue("ui-client");

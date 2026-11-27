@@ -89,6 +89,7 @@ Errors are JSON: `{"error": "..."}`.
 | `POST` | `/secrets/{group}/{key}/generate` | read + write | Creates a random value if missing (idempotent). Body `{"length":32}` |
 | `GET` | `/groups/{group}` | read | `{"KEY":"value",…}` |
 | `GET` | `/env/{group}` | read | `.env` text (see below) |
+| `PUT` | `/env/{group}?overwrite=false` | write | Import a `.env` body. Returns `{"created","updated","skippedExisting","warnings"}` |
 
 | Status | Meaning |
 | :---: | :--- |
@@ -112,6 +113,10 @@ curl -s -H "Authorization: Bearer $TOKEN" $BV/api/v1/secrets/postgres/ADMIN_PASS
 curl -s -H "Authorization: Bearer $TOKEN" $BV/api/v1/env/affine > .env
 curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"value":"s3cret"}' $BV/api/v1/secrets/affine/API_KEY
+
+# Upload a whole .env file into a group (existing keys are kept unless overwrite=true)
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" --data-binary @.env \
+  "$BV/api/v1/env/affine?overwrite=false"
 ```
 
 ### `.env` format
@@ -121,6 +126,23 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/j
 - Otherwise `KEY="value"` with `\\ \" \$ \n \r` escaped.
 - Keys that are not valid variable names (like `private.key`) are left out and listed in a
   trailing comment. Use the JSON endpoints for those.
+
+### Importing a `.env` file
+
+In the UI, use **Secrets → Import .env**: choose a group, drop the file, and check the preview.
+The preview lists keys with masked values and whether each will be created, overwritten or skipped,
+plus any parser warnings. Nothing is stored until you click **Import**. Scripts can do the same with
+`PUT /api/v1/env/{group}`.
+
+Parsing follows Docker Compose:
+- comments, blank lines and `export KEY=…` are handled
+- `'single'` quotes are literal; `"double"` quotes unescape `\n \r \t \\ \" \$`
+- quoted values may span lines (PEM keys)
+- unquoted values are trimmed, and `␠#` starts a comment
+
+Duplicate keys keep the last value, and empty values and invalid keys are skipped with a warning.
+The file is never stored, and must be at most 256 KiB / 1000 entries. Anything `GET /env/{group}`
+returns can be uploaded again unchanged.
 
 ---
 

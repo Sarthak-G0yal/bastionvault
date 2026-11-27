@@ -31,6 +31,7 @@ import jakarta.annotation.security.RolesAllowed;
 import tech.sarthakgoyal.bastionvault.domain.AuditEvent.Outcome;
 import tech.sarthakgoyal.bastionvault.domain.Secret;
 import tech.sarthakgoyal.bastionvault.service.AuditService;
+import tech.sarthakgoyal.bastionvault.service.EnvImportService;
 import tech.sarthakgoyal.bastionvault.service.SecretService;
 import tech.sarthakgoyal.bastionvault.ui.UiSupport;
 import tech.sarthakgoyal.bastionvault.ui.layout.MainLayout;
@@ -47,6 +48,7 @@ public class SecretsView extends VerticalLayout {
     private final SecretService secrets;
     private final AuditService audit;
     private final AuthenticationContext auth;
+    private final EnvImportService envImport;
 
     private final TextField group = new TextField("Group");
     private final TextField key = new TextField("Key");
@@ -54,8 +56,10 @@ public class SecretsView extends VerticalLayout {
     private final TextField filter = new TextField();
     private final Accordion groups = new Accordion();
 
-    public SecretsView(SecretService secrets, AuditService audit, AuthenticationContext auth) {
+    public SecretsView(SecretService secrets, AuditService audit, AuthenticationContext auth,
+            EnvImportService envImport) {
         this.secrets = secrets;
+        this.envImport = envImport;
         this.audit = audit;
         this.auth = auth;
         setSizeFull();
@@ -69,6 +73,9 @@ public class SecretsView extends VerticalLayout {
         Button save = new Button("Encrypt & save", VaadinIcon.LOCK.create(), e -> save());
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         Button generate = new Button("Generate random (32)", VaadinIcon.MAGIC.create(), e -> generate());
+        Button importEnv = new Button("Import .env", VaadinIcon.UPLOAD.create(),
+                e -> new EnvImportDialog(secrets, envImport, audit, UiSupport.admin(auth), group.getValue().trim(),
+                        this::refresh).open());
 
         FormLayout form = new FormLayout(group, key, value);
         form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("700px", 3));
@@ -80,7 +87,7 @@ public class SecretsView extends VerticalLayout {
         filter.setPrefixComponent(VaadinIcon.SEARCH.create());
 
         groups.setWidthFull();
-        add(new H2("Secrets"), form, new HorizontalLayout(save, generate), filter, groups);
+        add(new H2("Secrets"), form, new HorizontalLayout(save, generate, importEnv), filter, groups);
         refresh();
     }
 

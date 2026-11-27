@@ -189,6 +189,51 @@ class VaultIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // ------------------------------------------------------------ .env import
+
+    @Test
+    void envUploadCreatesSkipsAndOverwrites() throws Exception {
+        String group = unique("envimp");
+        String auth = "Bearer " + clientToken(unique("uploader"), group, true, true);
+        secrets.put(group, "EXISTING", "old", "test");
+        String env = "# app config\nEXISTING=new\nDB_URL=\"postgres://u:p@h/db\"\nPEM='a\nb'\nBAD KEY=x\n";
+
+        mvc.perform(put("/api/v1/env/" + group).header("Authorization", auth)
+                        .contentType(MediaType.TEXT_PLAIN).content(env))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(2))
+                .andExpect(jsonPath("$.skippedExisting").value(1))
+                .andExpect(jsonPath("$.warnings.length()").value(1));
+        assertThat(secrets.get(group, "EXISTING")).contains("old");
+        assertThat(secrets.get(group, "DB_URL")).contains("postgres://u:p@h/db");
+        assertThat(secrets.get(group, "PEM")).contains("a\nb");
+
+        mvc.perform(put("/api/v1/env/" + group + "?overwrite=true").header("Authorization", auth).content(env))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.updated").value(3));
+        assertThat(secrets.get(group, "EXISTING")).contains("new");
+
+        // what GET /env returns can be uploaded again unchanged
+        String exported = mvc.perform(get("/api/v1/env/" + group).header("Authorization", auth))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(put("/api/v1/env/" + group + "?overwrite=true").header("Authorization", auth).content(exported))
+                .andExpect(status().isOk());
+        assertThat(secrets.get(group, "PEM")).contains("a\nb");
+    }
+
+    @Test
+    void envUploadNeedsWriteAccessAndContent() throws Exception {
+        String group = unique("envro");
+        String auth = "Bearer " + clientToken(unique("readonly"), group, true, false);
+        mvc.perform(put("/api/v1/env/" + group).header("Authorization", auth).content("A=1"))
+                .andExpect(status().isForbidden());
+        String writer = "Bearer " + clientToken(unique("w"), group, false, true);
+        mvc.perform(put("/api/v1/env/" + group).header("Authorization", writer).content("# only comments\n"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/env/" + group).header("Authorization", writer))
+                .andExpect(status().isBadRequest());
+    }
+
     // ------------------------------------------------------------ 3B: API keys
 
     @Test

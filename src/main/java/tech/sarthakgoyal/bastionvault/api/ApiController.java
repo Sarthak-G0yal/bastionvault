@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import tech.sarthakgoyal.bastionvault.crypto.KeyManager;
@@ -24,6 +25,7 @@ import tech.sarthakgoyal.bastionvault.service.AuditService;
 import tech.sarthakgoyal.bastionvault.service.ClientIp;
 import tech.sarthakgoyal.bastionvault.service.ClientService;
 import tech.sarthakgoyal.bastionvault.service.EnvFormatter;
+import tech.sarthakgoyal.bastionvault.service.EnvImportService;
 import tech.sarthakgoyal.bastionvault.service.NotFoundException;
 import tech.sarthakgoyal.bastionvault.service.PolicyDeniedException;
 import tech.sarthakgoyal.bastionvault.service.PolicyService;
@@ -42,6 +44,7 @@ import tech.sarthakgoyal.bastionvault.service.TokenService;
  * POST   /api/v1/secrets/{group}/{key}/generate  {"length": 32} create if absent  read+write
  * GET    /api/v1/groups/{group}                  {"KEY": "value", ...}            read
  * GET    /api/v1/env/{group}                     .env text                        read
+ * PUT    /api/v1/env/{group}?overwrite=false     .env text body -> import         write
  * </pre>
  */
 @RestController
@@ -55,9 +58,10 @@ public class ApiController {
     private final AuditService audit;
     private final AttemptLimiter limiter;
     private final KeyManager keys;
+    private final EnvImportService envImport;
 
     public ApiController(TokenService tokens, ClientService clients, SecretService secrets, PolicyService policies,
-            AuditService audit, AttemptLimiter limiter, KeyManager keys) {
+            AuditService audit, AttemptLimiter limiter, KeyManager keys, EnvImportService envImport) {
         this.tokens = tokens;
         this.clients = clients;
         this.secrets = secrets;
@@ -65,6 +69,7 @@ public class ApiController {
         this.audit = audit;
         this.limiter = limiter;
         this.keys = keys;
+        this.envImport = envImport;
     }
 
     public record TokenRequest(String clientId, String clientSecret, Integer expiresInMinutes) {
@@ -160,6 +165,31 @@ public class ApiController {
     @GetMapping(value = "/env/{group}", produces = MediaType.TEXT_PLAIN_VALUE)
     public String env(@PathVariable String group, Authentication auth) {
         return EnvFormatter.format(readGroup(auth.getName(), group, "READ_ENV"));
+    }
+
+    /**
+     * Imports a .env file into a group. Existing keys are kept unless {@code overwrite=true}.
+     * Accepts any text body (text/plain, application/octet-stream, or no content type).
+     */
+    @PutMapping("/env/{group}")
+    public Map<String, Object> importEnv(@PathVariable String group,
+            @RequestParam(defaultValue = "false") boolean overwrite, @RequestBody(required = false) byte[] body,
+            Authentication auth) {
+        String client = auth.getName();
+        authorize(client, "IMPORT_ENV", group, null, Capability.WRITE);
+        if (body == null || body.length == 0) {
+            throw new IllegalArgumentException("Request body must contain the .env file");
+        }
+        if (body.length > tech.sarthakgoyal.bastionvault.service.EnvParser.MAX_BYTES) {
+            throw new IllegalArgumentException("File is larger than 256 KiB");
+        }
+        EnvImportService.Result result = envImport.importEnv(group,
+                new String(body, java.nio.charset.StandardCharsets.UTF_8), overwrite, "client:" + client);
+        audit.record(tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType.CLIENT, client, "IMPORT_ENV", group,
+                Outcome.SUCCESS, "created=" + result.created() + " updated=" + result.updated()
+                        + " skipped=" + result.skippedExisting() + " warnings=" + result.warnings().size());
+        return Map.of("group", group, "created", result.created(), "updated", result.updated(),
+                "skippedExisting", result.skippedExisting(), "warnings", result.warnings());
     }
 
     private Map<String, String> readGroup(String client, String group, String action) {

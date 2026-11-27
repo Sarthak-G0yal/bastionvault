@@ -96,6 +96,13 @@ public class SecretService {
         return secret.isPresent();
     }
 
+    /** Keys that already exist in a group (no decryption). */
+    public java.util.Set<String> existingKeys(String group) {
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        repository.findByGroupNameOrderBySecretKeyAsc(group).forEach(s -> keys.add(s.getSecretKey()));
+        return keys;
+    }
+
     /** Metadata only; never decrypts. Safe to call while sealed. */
     public List<Secret> listAll() {
         return repository.findAllByOrderByGroupNameAscSecretKeyAsc();
