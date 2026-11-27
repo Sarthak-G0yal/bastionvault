@@ -1,0 +1,310 @@
+/* BastionVault docs theme
+ * Same palette as the app: a warm neutral ramp, near-black primary actions, and the brand
+ * orange (#fe742a) used sparingly for links, the active page and status dots.
+ */
+
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* ------------------------------------------------------------------ light */
+
+:root {
+  /* app ramp */
+  --bv-page: #f7f4ee;
+  --bv-sidebar: #f1ece3;
+  --bv-card: #fdfbf7;
+  --bv-raised: #efe9df;
+  --bv-raised-strong: #e6dfd2;
+  --bv-line: rgba(31, 27, 22, 0.08);
+  --bv-line-strong: rgba(31, 27, 22, 0.14);
+  --bv-text: #1f1b16;
+  --bv-text-2: #5e554a;
+  --bv-muted: #7b7266;
+  --bv-accent: #fe742a;
+  --bv-accent-ink: #b4470f;
+  --bv-accent-soft: rgba(254, 116, 42, 0.12);
+  --bv-vault: #1f1b16;
+  --bv-vault-raised: #2b261f;
+  --bv-vault-text: #efe9de;
+  --bv-vault-muted: #aaa398;
+  --bv-vault-line: rgba(239, 233, 222, 0.12);
+  --bv-vault-edge: transparent;
+  --bv-door-shadow: 0 8px 24px rgba(31, 27, 22, 0.12);
+
+  /* VitePress mapping */
+  --vp-c-bg: var(--bv-page);
+  --vp-c-bg-alt: var(--bv-sidebar);
+  --vp-c-bg-elv: var(--bv-card);
+  --vp-c-bg-soft: var(--bv-raised);
+
+  --vp-c-text-1: var(--bv-text);
+  --vp-c-text-2: var(--bv-text-2);
+  --vp-c-text-3: var(--bv-muted);
+
+  --vp-c-divider: var(--bv-line);
+  --vp-c-border: var(--bv-line-strong);
+  --vp-c-gutter: var(--bv-line);
+
+  --vp-c-default-1: #d6cdbf;
+  --vp-c-default-2: var(--bv-raised-strong);
+  --vp-c-default-3: #d6cdbf;
+  --vp-c-default-soft: rgba(31, 27, 22, 0.05);
+
+  --vp-c-brand-1: var(--bv-accent-ink);
+  --vp-c-brand-2: #9a3c0c;
+  --vp-c-brand-3: var(--bv-accent);
+  --vp-c-brand-soft: var(--bv-accent-soft);
+
+  --vp-c-tip-1: var(--bv-accent-ink);
+  --vp-c-tip-2: #9a3c0c;
+  --vp-c-tip-3: var(--bv-accent);
+  --vp-c-tip-soft: var(--bv-accent-soft);
+
+  --vp-c-note-1: var(--bv-text-2);
+  --vp-c-note-2: var(--bv-text);
+  --vp-c-note-3: var(--bv-muted);
+  --vp-c-note-soft: rgba(31, 27, 22, 0.05);
+
+  --vp-c-success-1: #15803d;
+  --vp-c-danger-1: #b91c1c;
+  --vp-c-danger-soft: rgba(220, 38, 38, 0.08);
+
+  --vp-font-family-base: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --vp-font-family-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* primary action: near-black, like the app */
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: var(--bv-card);
+  --vp-button-brand-bg: var(--bv-text);
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: var(--bv-card);
+  --vp-button-brand-hover-bg: #38322a;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: var(--bv-card);
+  --vp-button-brand-active-bg: #38322a;
+
+  --vp-button-alt-border: var(--bv-line-strong);
+  --vp-button-alt-text: var(--bv-text);
+  --vp-button-alt-bg: var(--bv-card);
+  --vp-button-alt-hover-border: var(--bv-line-strong);
+  --vp-button-alt-hover-text: var(--bv-text);
+  --vp-button-alt-hover-bg: var(--bv-raised);
+  --vp-button-alt-active-border: var(--bv-line-strong);
+  --vp-button-alt-active-text: var(--bv-text);
+  --vp-button-alt-active-bg: var(--bv-raised-strong);
+
+  --vp-home-hero-name-color: var(--bv-text);
+  --vp-home-hero-name-background: none;
+
+  --vp-nav-bg-color: var(--bv-page);
+  --vp-nav-screen-bg-color: var(--bv-page);
+  --vp-sidebar-bg-color: var(--bv-sidebar);
+  --vp-local-nav-bg-color: var(--bv-page);
+
+  --vp-code-color: var(--bv-text);
+  --vp-code-bg: rgba(31, 27, 22, 0.06);
+  --vp-code-block-bg: var(--bv-card);
+  --vp-code-block-divider-color: var(--bv-line);
+  --vp-code-tab-bg: var(--bv-card);
+  --vp-code-tab-divider: var(--bv-line);
+  --vp-code-copy-code-bg: var(--bv-raised);
+  --vp-code-copy-code-hover-bg: var(--bv-raised-strong);
+  --vp-code-copy-code-border-color: var(--bv-line-strong);
+
+  --vp-custom-block-info-bg: var(--bv-card);
+  --vp-custom-block-info-border: var(--bv-line-strong);
+  --vp-custom-block-tip-bg: var(--bv-accent-soft);
+  --vp-custom-block-tip-border: transparent;
+
+  --vp-local-search-bg: var(--bv-page);
+  --vp-local-search-result-bg: var(--bv-card);
+  --vp-local-search-highlight-bg: var(--bv-accent);
+  --vp-local-search-highlight-text: var(--bv-text);
+}
+
+/* ------------------------------------------------------------------ dark */
+
+.dark {
+  --bv-page: #161513;
+  --bv-sidebar: #12110f;
+  --bv-card: #1c1a18;
+  --bv-raised: #262421;
+  --bv-raised-strong: #322f2b;
+  --bv-line: rgba(239, 233, 222, 0.08);
+  --bv-line-strong: rgba(239, 233, 222, 0.14);
+  --bv-text: #efe9de;
+  --bv-text-2: #aaa398;
+  --bv-muted: #8a847a;
+  --bv-accent-ink: #ff9a63;
+  --bv-accent-soft: rgba(254, 116, 42, 0.16);
+  --bv-vault: #1c1a18;
+  --bv-vault-raised: #322d27;
+  --bv-vault-edge: rgba(239, 233, 222, 0.10);
+  --bv-door-shadow: none;
+
+  --vp-c-default-1: #423d37;
+  --vp-c-default-2: #34302b;
+  --vp-c-default-3: #423d37;
+  --vp-c-default-soft: rgba(239, 233, 222, 0.06);
+
+  --vp-c-brand-2: #ffb487;
+  --vp-c-tip-2: #ffb487;
+  --vp-c-note-soft: rgba(239, 233, 222, 0.06);
+
+  --vp-c-success-1: #4cc38a;
+  --vp-c-danger-1: #e5484d;
+  --vp-c-danger-soft: rgba(229, 72, 77, 0.12);
+
+  /* primary action: off-white with dark text, like the app's dark theme */
+  --vp-button-brand-text: var(--bv-page);
+  --vp-button-brand-bg: var(--bv-text);
+  --vp-button-brand-hover-text: var(--bv-page);
+  --vp-button-brand-hover-bg: #ffffff;
+  --vp-button-brand-active-text: var(--bv-page);
+  --vp-button-brand-active-bg: #ffffff;
+
+  --vp-local-search-highlight-text: var(--bv-page);
+
+  --vp-code-bg: rgba(239, 233, 222, 0.08);
+}
+
+/* ------------------------------------------------------------------ controls */
+
+.VPButton {
+  border-radius: 10px !important;
+}
+
+/* ------------------------------------------------------------------ type */
+
+body {
+  font-feature-settings: "ss01";
+}
+
+.vp-doc h1 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4 {
+  font-weight: 500;
+}
+
+.vp-doc h2 {
+  border-top-color: var(--vp-c-divider);
+}
+
+.vp-doc table {
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-doc tr:nth-child(2n) {
+  background-color: transparent;
+}
+
+.vp-doc th {
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+}
+
+.VPNavBarTitle .title {
+  gap: 10px;
+  font-weight: 600;
+}
+
+.VPNavBarTitle .logo {
+  border-radius: 7px;
+}
+
+/* the active page in the sidebar uses the accent, like the app's nav marker */
+.VPSidebarItem.is-active > .item .link > .text {
+  color: var(--vp-c-text-1);
+  font-weight: 500;
+}
+
+.VPSidebarItem.is-active > .item > .indicator {
+  background-color: var(--bv-accent);
+}
+
+/* ------------------------------------------------------------------ home */
+
+.VPHome .VPHero .container {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.VPHome .VPHero .main {
+  order: 1;
+  width: 100%;
+  max-width: 52rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.VPHome .VPHero .heading {
+  align-items: center;
+}
+
+.VPHome .VPHero .name,
+.VPHome .VPHero .text {
+  margin-inline: auto;
+  max-width: 48rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.VPHome .VPHero .text {
+  color: var(--vp-c-text-2);
+}
+
+.VPHome .VPHero .tagline {
+  margin-inline: auto;
+  max-width: 40rem;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+.VPHome .VPHero .actions {
+  justify-content: center;
+}
+
+@media (min-width: 60rem) {
+  .VPHome .VPHero .name,
+  .VPHome .VPHero .text {
+    font-size: 3.25rem;
+    line-height: 1.1;
+  }
+}
+
+.VPHome .VPFeature {
+  background-color: var(--bv-card);
+  border-color: var(--vp-c-divider);
+  border-radius: 14px;
+}
+
+.VPHome .VPFeature .icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: var(--bv-raised);
+  color: var(--vp-c-text-2);
+}
+
+.VPHome .VPFeature .title {
+  font-weight: 500;
+}
