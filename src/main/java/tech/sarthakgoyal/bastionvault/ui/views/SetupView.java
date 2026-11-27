@@ -78,7 +78,7 @@ public class SetupView extends Div implements BeforeEnterObserver {
         Div card = new Div(UiSupport.brand(), title, text, token, admin, username, loginPassword, loginConfirm,
                 encryption, master, masterConfirm, init);
         card.addClassNames("bv-auth-card", "wide");
-        add(card);
+        add(LoginView.toggle(), card);
     }
 
     @Override

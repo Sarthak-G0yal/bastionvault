@@ -91,7 +91,7 @@ public class MainLayout extends AppLayout implements BeforeEnterObserver, AfterN
         Span label = new Span(name);
         label.addClassName("bv-user-name");
         Button logout = UiSupport.iconButton("log-out", "Log out", e -> auth.logout());
-        Div row = new Div(avatar, label, logout);
+        Div row = new Div(avatar, label, UiSupport.themeToggle(), logout);
         row.addClassName("bv-user");
         return row;
     }

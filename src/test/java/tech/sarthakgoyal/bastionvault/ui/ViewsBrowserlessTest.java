@@ -169,6 +169,12 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     }
 
     @Test
+    void themeToggleIsInTheSidebar() {
+        navigate(SecretsView.class);
+        assertThat($(Button.class).withAttribute("aria-label", "Switch theme").all()).hasSize(1);
+    }
+
+    @Test
     void auditViewRenders() {
         navigate(AuditView.class);
         assertThat($(Grid.class).single()).isNotNull();
@@ -179,5 +185,6 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     void anonymousUsersGetTheLoginForm() {
         navigate(LoginView.class);
         assertThat($(LoginForm.class).single()).isNotNull();
+        assertThat($(Button.class).withAttribute("aria-label", "Switch theme").all()).hasSize(1);
     }
 }

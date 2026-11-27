@@ -67,6 +67,31 @@ public final class UiSupport {
         return b;
     }
 
+    /**
+     * Switches between the light and dark theme and remembers the choice in this browser. Runs
+     * entirely in the browser; the icon shows the theme you would switch to.
+     */
+    public static Button themeToggle() {
+        SvgIcon moon = icon("moon");
+        moon.addClassName("bv-icon-moon");
+        SvgIcon sun = icon("sun");
+        sun.addClassName("bv-icon-sun");
+        Button b = new Button(new Span(moon, sun));
+        b.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        b.addClassNames("bv-icon-btn", "bv-theme-toggle");
+        b.setAriaLabel("Switch theme");
+        b.setTooltipText("Switch between light and dark");
+        b.getElement().executeJs("""
+                this.addEventListener('click', () => {
+                  const root = document.documentElement;
+                  const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                  root.setAttribute('data-theme', next);
+                  try { localStorage.setItem('bv-theme', next); } catch (e) {}
+                });
+                """);
+        return b;
+    }
+
     // ---------------------------------------------------------------- page structure
 
     public static Div page() {

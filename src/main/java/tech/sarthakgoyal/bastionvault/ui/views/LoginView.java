@@ -47,7 +47,14 @@ public class LoginView extends Div implements BeforeEnterObserver {
         text.addClassName("bv-auth-text");
         Div card = new Div(UiSupport.brand(), title, text, login);
         card.addClassName("bv-auth-card");
-        add(card);
+        add(toggle(), card);
+    }
+
+    /** Theme toggle in the top-right corner of the signed-out screens. */
+    static com.vaadin.flow.component.button.Button toggle() {
+        var toggle = UiSupport.themeToggle();
+        toggle.addClassName("bv-auth-toggle");
+        return toggle;
     }
 
     @Override

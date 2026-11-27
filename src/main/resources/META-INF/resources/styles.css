@@ -49,6 +49,20 @@ html {
     --bv-positive: #16a34a;
     --bv-negative: #dc2626;
 
+    /* ---- interaction and depth (overridden in dark) ---- */
+    --bv-hover-tint: rgba(31, 27, 22, 0.02);
+    --bv-bar: var(--bv-raised-strong);
+    --bv-bar-hover: #d6cdbf;
+    --bv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --bv-primary-bg: #1f1b16;
+    --bv-primary-fg: #fdfbf7;
+    --bv-primary-hover: #38322a;
+    --bv-primary-highlight: rgba(255, 255, 255, 0.10);
+    --bv-vault-hover: #38322a;
+    --bv-vault-line: rgba(239, 233, 222, 0.12);
+    --bv-vault-edge: transparent;
+    --bv-door-shadow: 0 8px 24px rgba(31, 27, 22, 0.12);
+
     --bv-font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
     --bv-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --bv-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -165,7 +179,7 @@ vaadin-side-nav-item:hover::part(content) { background: var(--bv-raised); color:
 vaadin-side-nav-item[current]::part(content) {
     background: var(--bv-card);
     color: var(--bv-text);
-    box-shadow: inset 0 0 0 1px var(--bv-line), 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: inset 0 0 0 1px var(--bv-line), var(--bv-shadow-sm);
 }
 
 vaadin-side-nav-item[current] > [slot="prefix"] { color: var(--bv-accent-ink); }
@@ -176,6 +190,7 @@ vaadin-side-nav-item > [slot="prefix"] { color: var(--bv-muted); }
 /* the vault door: the one dark element in the shell */
 .bv-seal-card {
     background: var(--bv-vault);
+    box-shadow: inset 0 0 0 1px var(--bv-vault-edge);
     color: var(--bv-vault-text);
     border-radius: var(--bv-radius-card);
     padding: 16px;
@@ -216,7 +231,7 @@ vaadin-side-nav-item > [slot="prefix"] { color: var(--bv-muted); }
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.bv-seal-card vaadin-button:hover { background: #38322a; }
+.bv-seal-card vaadin-button:hover { background: var(--bv-vault-hover); }
 
 .bv-user {
     display: flex;
@@ -364,13 +379,13 @@ vaadin-side-nav-item > [slot="prefix"] { color: var(--bv-muted); }
 }
 
 .bv-bar {
-    background: var(--bv-raised-strong);
+    background: var(--bv-bar);
     border-radius: 4px 4px 0 0;
     min-height: 2px;
     transition: background-color 150ms var(--bv-ease);
 }
 
-.bv-bar:hover { background: #d6cdbf; }
+.bv-bar:hover { background: var(--bv-bar-hover); }
 .bv-bar.today { background: var(--bv-accent); }
 
 .bv-chart-axis {
@@ -440,7 +455,7 @@ vaadin-details.bv-box::part(summary) {
     transition: background-color 150ms var(--bv-ease);
 }
 
-vaadin-details.bv-box::part(summary):hover { background: rgba(31, 27, 22, 0.02); }
+vaadin-details.bv-box::part(summary):hover { background: var(--bv-hover-tint); }
 vaadin-details.bv-box::part(content) { padding: 0 16px 12px; }
 
 .bv-box-summary {
@@ -531,12 +546,12 @@ vaadin-button {
 vaadin-button:active { transform: scale(0.98); }
 
 vaadin-button[theme~="primary"] {
-    background: var(--bv-text);
-    color: var(--bv-card);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    background: var(--bv-primary-bg);
+    color: var(--bv-primary-fg);
+    box-shadow: inset 0 1px 0 var(--bv-primary-highlight);
 }
 
-vaadin-button[theme~="primary"]:hover { background: #38322a; }
+vaadin-button[theme~="primary"]:hover { background: var(--bv-primary-hover); }
 
 vaadin-button.bv-secondary {
     background: var(--bv-card);
@@ -597,7 +612,7 @@ vaadin-grid::part(header-cell) {
     color: var(--bv-muted);
 }
 
-vaadin-grid::part(row):hover { background: rgba(31, 27, 22, 0.02); }
+vaadin-grid::part(row):hover { background: var(--bv-hover-tint); }
 
 /* ============================================================ auth screens */
 
@@ -663,11 +678,11 @@ vaadin-login-form { --vaadin-login-form-background: transparent; }
     display: flex;
     flex-direction: column;
     gap: 16px;
-    box-shadow: 0 8px 24px rgba(31, 27, 22, 0.12);
+    box-shadow: var(--bv-door-shadow), inset 0 0 0 1px var(--bv-vault-edge);
     --vaadin-text-color: var(--bv-vault-text);
     --vaadin-text-color-secondary: var(--bv-vault-muted);
     --vaadin-input-field-background: var(--bv-vault-raised);
-    --vaadin-input-field-border-color: rgba(239, 233, 222, 0.12);
+    --vaadin-input-field-border-color: var(--bv-vault-line);
     --vaadin-input-field-value-color: var(--bv-vault-text);
     --vaadin-input-field-label-color: var(--bv-vault-muted);
     color-scheme: dark;
@@ -684,7 +699,7 @@ vaadin-login-form { --vaadin-login-form-background: transparent; }
     place-items: center;
     background: var(--bv-vault-raised);
     color: var(--bv-accent);
-    box-shadow: inset 0 0 0 1px rgba(239, 233, 222, 0.10);
+    box-shadow: inset 0 0 0 1px var(--bv-vault-line);
 }
 
 /* ============================================================ settings */
@@ -743,7 +758,7 @@ vaadin-side-nav-item::part(content) {
 .bv-door vaadin-password-field::part(input-field) {
     background: var(--bv-vault-raised);
     color: var(--bv-vault-text);
-    box-shadow: inset 0 0 0 1px rgba(239, 233, 222, 0.12);
+    box-shadow: inset 0 0 0 1px var(--bv-vault-line);
 }
 
 .bv-door vaadin-password-field::part(label),
@@ -752,3 +767,63 @@ vaadin-side-nav-item::part(content) {
 .bv-door vaadin-radio-button { color: var(--bv-vault-text); }
 
 .bv-door vaadin-password-field-button { color: var(--bv-vault-muted); }
+
+/* ============================================================ dark theme
+ * Same roles, warm dark ramp. Set on <html data-theme="dark"> by the toggle (stored in localStorage)
+ * or, until the user chooses, by the system preference.
+ */
+html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --bv-page: #161513;
+    --bv-sidebar: #12110f;
+    --bv-card: #1c1a18;
+    --bv-raised: #262421;
+    --bv-raised-strong: #322f2b;
+    --bv-line: rgba(239, 233, 222, 0.08);
+    --bv-line-strong: rgba(239, 233, 222, 0.14);
+    --bv-text: #efe9de;
+    --bv-text-2: #aaa398;
+    --bv-muted: #8a847a;
+
+    --bv-accent: #fe742a;
+    --bv-accent-ink: #ff9a63; /* orange as text on dark surfaces */
+    --bv-accent-soft: rgba(254, 116, 42, 0.16);
+
+    /* the vault card stays the one distinct surface: a raised step with a hairline */
+    --bv-vault: #25221e;
+    --bv-vault-raised: #322d27;
+    --bv-vault-hover: #3d3730;
+    --bv-vault-edge: rgba(239, 233, 222, 0.10);
+
+    --bv-positive: #4cc38a;
+    --bv-negative: #e5484d;
+
+    --bv-hover-tint: rgba(239, 233, 222, 0.03);
+    --bv-bar: #34302b;
+    --bv-bar-hover: #423d37;
+    --bv-shadow-sm: 0 0 0 rgba(0, 0, 0, 0);
+    --bv-primary-bg: #efe9de;
+    --bv-primary-fg: #161513;
+    --bv-primary-hover: #ffffff;
+    --bv-primary-highlight: rgba(255, 255, 255, 0);
+    --bv-door-shadow: 0 0 0 rgba(0, 0, 0, 0);
+
+    --aura-accent-color-dark: #efe9de;
+    --aura-accent-color-light: #efe9de;
+    --aura-background-color-dark: var(--bv-page);
+    --aura-app-background: var(--bv-page);
+}
+
+/* theme toggle: show the icon of the theme you would switch to */
+.bv-theme-toggle .bv-icon-sun { display: none; }
+html[data-theme="dark"] .bv-theme-toggle .bv-icon-sun { display: inline-flex; }
+html[data-theme="dark"] .bv-theme-toggle .bv-icon-moon { display: none; }
+
+.bv-auth { position: relative; }
+
+.bv-auth-toggle {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+}
