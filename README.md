@@ -90,6 +90,10 @@ Errors are JSON: `{"error": "..."}`.
 | `GET` | `/groups/{group}` | read | `{"KEY":"value",…}` |
 | `GET` | `/env/{group}` | read | `.env` text (see below) |
 | `PUT` | `/env/{group}?overwrite=false` | write | Import a `.env` body. Returns `{"created","updated","skippedExisting","warnings"}` |
+| `GET` | `/export/{group}?format=json` | read | One group as `json`, `yaml` or `env` (download) |
+| `GET` | `/export?format=json` | read, per group | Every group the client can read: `{group: {KEY: value}}` |
+| `PUT` | `/import/{group}?format=&overwrite=false` | write | Import a `json`, `yaml` or `env` body. Format comes from `?format=`, else the `Content-Type`, else `.env` |
+| `PUT` | `/import?format=&overwrite=false` | write on **every** group in the file | Import `{group: {KEY: value}}`. 403 if any group is not writable |
 
 | Status | Meaning |
 | :---: | :--- |
@@ -127,9 +131,37 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" --data-binary @.env \
 - Keys that are not valid variable names (like `private.key`) are left out and listed in a
   trailing comment. Use the JSON endpoints for those.
 
+### JSON and YAML
+
+| Shape | JSON | YAML | Used by |
+| :--- | :--- | :--- | :--- |
+| One group | `{"DB_PASS": "x", "PORT": "5432"}` | `DB_PASS: x` / `PORT: "5432"` | `/export/{group}`, `/import/{group}`, *Import file* |
+| Whole vault | `{"affine": {"DATABASE_URL": "…"}, "memos": {…}}` | `affine:` / `  DATABASE_URL: …` | `/export`, `/import`, *Settings → Export and import everything* |
+
+- Values are always strings. YAML values are kept **exactly as written**: `yes`, `0123` and `5432`
+  stay those strings instead of turning into `true`, `83` or a number. JSON numbers and booleans are
+  accepted and stored as their text, with a warning.
+- Multi-line values are exported as YAML literal blocks (`|`).
+- Nested objects and lists inside a group, `null` and empty values are skipped with a warning.
+  YAML aliases are limited, so "billion laughs" files are refused.
+- Limits: 256 KiB per group file, 4 MiB per vault file.
+- Whatever you export, in any format, imports back to exactly the same values.
+
+In the UI, each group on the Secrets page has **Export: .env / JSON / YAML** links.
+**Settings → Export everything** asks for the master password before it offers the download, because
+the file holds every secret in plain text. **Import vault file** shows a preview per group before
+writing anything.
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" "$BV/api/v1/export/affine?format=yaml" > affine.yaml
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/yaml' \
+  --data-binary @affine.yaml "$BV/api/v1/import/affine?overwrite=true"
+```
+
 ### Importing a `.env` file
 
-In the UI, use **Secrets → Import .env**: choose a group, drop the file, and check the preview.
+In the UI, use **Secrets → Import file** (`.env`, `.json`, `.yaml`): choose a group, drop the file, and
+check the preview. The format is detected from the file name and can be changed.
 The preview lists keys with masked values and whether each will be created, overwritten or skipped,
 plus any parser warnings. Nothing is stored until you click **Import**. Scripts can do the same with
 `PUT /api/v1/env/{group}`.

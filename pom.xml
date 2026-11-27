@@ -43,6 +43,12 @@
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
+		<!-- YAML import/export (version managed by Spring Boot) -->
+		<dependency>
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+		</dependency>
+
 		<!-- Storage: PostgreSQL + Flyway migrations -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

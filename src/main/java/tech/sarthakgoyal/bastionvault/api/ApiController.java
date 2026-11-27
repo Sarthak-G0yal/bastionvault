@@ -25,7 +25,9 @@ import tech.sarthakgoyal.bastionvault.service.AuditService;
 import tech.sarthakgoyal.bastionvault.service.ClientIp;
 import tech.sarthakgoyal.bastionvault.service.ClientService;
 import tech.sarthakgoyal.bastionvault.service.EnvFormatter;
-import tech.sarthakgoyal.bastionvault.service.EnvImportService;
+import tech.sarthakgoyal.bastionvault.service.SecretCodec;
+import tech.sarthakgoyal.bastionvault.service.SecretFormat;
+import tech.sarthakgoyal.bastionvault.service.SecretImportService;
 import tech.sarthakgoyal.bastionvault.service.NotFoundException;
 import tech.sarthakgoyal.bastionvault.service.PolicyDeniedException;
 import tech.sarthakgoyal.bastionvault.service.PolicyService;
@@ -45,6 +47,10 @@ import tech.sarthakgoyal.bastionvault.service.TokenService;
  * GET    /api/v1/groups/{group}                  {"KEY": "value", ...}            read
  * GET    /api/v1/env/{group}                     .env text                        read
  * PUT    /api/v1/env/{group}?overwrite=false     .env text body -> import         write
+ * GET    /api/v1/export/{group}?format=json      one group as json | yaml | env   read
+ * GET    /api/v1/export?format=json              every readable group (json|yaml) read (per group)
+ * PUT    /api/v1/import/{group}?format=&overwrite=  json | yaml | env body       write
+ * PUT    /api/v1/import?format=&overwrite=       {group: {KEY: value}} body      write (every group)
  * </pre>
  */
 @RestController
@@ -58,10 +64,11 @@ public class ApiController {
     private final AuditService audit;
     private final AttemptLimiter limiter;
     private final KeyManager keys;
-    private final EnvImportService envImport;
+    private final SecretImportService importer;
+    private final SecretCodec codec;
 
     public ApiController(TokenService tokens, ClientService clients, SecretService secrets, PolicyService policies,
-            AuditService audit, AttemptLimiter limiter, KeyManager keys, EnvImportService envImport) {
+            AuditService audit, AttemptLimiter limiter, KeyManager keys, SecretImportService importer, SecretCodec codec) {
         this.tokens = tokens;
         this.clients = clients;
         this.secrets = secrets;
@@ -69,7 +76,8 @@ public class ApiController {
         this.audit = audit;
         this.limiter = limiter;
         this.keys = keys;
-        this.envImport = envImport;
+        this.importer = importer;
+        this.codec = codec;
     }
 
     public record TokenRequest(String clientId, String clientSecret, Integer expiresInMinutes) {
@@ -167,29 +175,99 @@ public class ApiController {
         return EnvFormatter.format(readGroup(auth.getName(), group, "READ_ENV"));
     }
 
-    /**
-     * Imports a .env file into a group. Existing keys are kept unless {@code overwrite=true}.
-     * Accepts any text body (text/plain, application/octet-stream, or no content type).
-     */
+    // ---------------------------------------------------------------- import / export
+
+    /** Imports a .env body into a group (kept for compatibility; same as /import/{group}?format=env). */
     @PutMapping("/env/{group}")
     public Map<String, Object> importEnv(@PathVariable String group,
             @RequestParam(defaultValue = "false") boolean overwrite, @RequestBody(required = false) byte[] body,
             Authentication auth) {
+        return importGroup(group, SecretFormat.ENV.id(), overwrite, null, body, auth);
+    }
+
+    /** Imports one group. Format: ?format=, else from Content-Type (json/yaml), else .env. */
+    @PutMapping("/import/{group}")
+    public Map<String, Object> importGroup(@PathVariable String group,
+            @RequestParam(required = false) String format, @RequestParam(defaultValue = "false") boolean overwrite,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "Content-Type", required = false)
+            String contentType, @RequestBody(required = false) byte[] body, Authentication auth) {
         String client = auth.getName();
-        authorize(client, "IMPORT_ENV", group, null, Capability.WRITE);
-        if (body == null || body.length == 0) {
-            throw new IllegalArgumentException("Request body must contain the .env file");
-        }
-        if (body.length > tech.sarthakgoyal.bastionvault.service.EnvParser.MAX_BYTES) {
-            throw new IllegalArgumentException("File is larger than 256 KiB");
-        }
-        EnvImportService.Result result = envImport.importEnv(group,
-                new String(body, java.nio.charset.StandardCharsets.UTF_8), overwrite, "client:" + client);
-        audit.record(tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType.CLIENT, client, "IMPORT_ENV", group,
-                Outcome.SUCCESS, "created=" + result.created() + " updated=" + result.updated()
+        authorize(client, "IMPORT", group, null, Capability.WRITE);
+        SecretFormat fmt = format != null ? SecretFormat.of(format) : SecretFormat.fromContentType(contentType);
+        SecretImportService.Result result = importer.importGroup(group, text(body, SecretCodec.MAX_GROUP_BYTES), fmt,
+                overwrite, "client:" + client);
+        audit.record(tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType.CLIENT, client, "IMPORT", group,
+                Outcome.SUCCESS, "format=" + fmt.id() + " created=" + result.created() + " updated=" + result.updated()
                         + " skipped=" + result.skippedExisting() + " warnings=" + result.warnings().size());
         return Map.of("group", group, "created", result.created(), "updated", result.updated(),
                 "skippedExisting", result.skippedExisting(), "warnings", result.warnings());
+    }
+
+    /** Imports {group: {KEY: value}}. The client needs write access to every group in the file. */
+    @PutMapping("/import")
+    public Map<String, Object> importVault(@RequestParam(required = false) String format,
+            @RequestParam(defaultValue = "false") boolean overwrite,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "Content-Type", required = false)
+            String contentType, @RequestBody(required = false) byte[] body, Authentication auth) {
+        String client = auth.getName();
+        SecretFormat fmt = format != null ? SecretFormat.of(format) : SecretFormat.fromContentType(contentType);
+        SecretCodec.ParsedVault vault = codec.readVault(text(body, SecretCodec.MAX_VAULT_BYTES), fmt);
+        java.util.List<String> denied = vault.groups().keySet().stream()
+                .filter(g -> !policies.allows(client, g, Capability.WRITE)).toList();
+        if (!denied.isEmpty()) {
+            audit.client(client, "IMPORT_ALL", String.join(",", denied), Outcome.DENIED);
+            throw new PolicyDeniedException("Client '" + client + "' has no write access to: " + String.join(", ", denied));
+        }
+        SecretImportService.VaultResult result = importer.importVault(vault, overwrite, "client:" + client);
+        audit.record(tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType.CLIENT, client, "IMPORT_ALL", null,
+                Outcome.SUCCESS, "format=" + fmt.id() + " groups=" + result.groups().size() + " created="
+                        + result.created() + " updated=" + result.updated() + " skipped=" + result.skippedExisting());
+        return Map.of("groups", result.groups().size(), "created", result.created(), "updated", result.updated(),
+                "skippedExisting", result.skippedExisting(), "warnings", result.warnings());
+    }
+
+    @GetMapping("/export/{group}")
+    public ResponseEntity<String> exportGroup(@PathVariable String group,
+            @RequestParam(defaultValue = "json") String format, Authentication auth) {
+        SecretFormat fmt = SecretFormat.of(format);
+        Map<String, String> values = readGroup(auth.getName(), group, "EXPORT_" + fmt.name());
+        return download(codec.writeGroup(values, fmt), group + fmt.extension(), fmt);
+    }
+
+    /** Every group the client can read, as {group: {KEY: value}}. */
+    @GetMapping("/export")
+    public ResponseEntity<String> exportVault(@RequestParam(defaultValue = "json") String format,
+            Authentication auth) {
+        String client = auth.getName();
+        SecretFormat fmt = SecretFormat.of(format);
+        Map<String, Map<String, String>> readable = new java.util.LinkedHashMap<>();
+        secrets.exportAll().forEach((group, values) -> {
+            if (policies.allows(client, group, Capability.READ)) {
+                readable.put(group, values);
+            }
+        });
+        String body = codec.writeVault(readable, fmt);
+        audit.record(tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType.CLIENT, client, "EXPORT_ALL", null,
+                Outcome.SUCCESS, "format=" + fmt.id() + " groups=" + readable.size());
+        return download(body, "bastionvault-export" + fmt.extension(), fmt);
+    }
+
+    private static ResponseEntity<String> download(String body, String fileName, SecretFormat format) {
+        return ResponseEntity.ok()
+                .header("Content-Type", format.contentType() + ";charset=UTF-8")
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .header("Cache-Control", "no-store")
+                .body(body);
+    }
+
+    private static String text(byte[] body, int max) {
+        if (body == null || body.length == 0) {
+            throw new IllegalArgumentException("Request body must contain the file");
+        }
+        if (body.length > max) {
+            throw new IllegalArgumentException("File is larger than " + (max / 1024) + " KiB");
+        }
+        return new String(body, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private Map<String, String> readGroup(String client, String group, String action) {

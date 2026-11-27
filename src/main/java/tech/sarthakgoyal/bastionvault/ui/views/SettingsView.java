@@ -1,5 +1,18 @@
 package tech.sarthakgoyal.bastionvault.ui.views;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.List;
+
+import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.html.Anchor;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.DownloadResponse;
+import tech.sarthakgoyal.bastionvault.service.SecretCodec;
+import tech.sarthakgoyal.bastionvault.service.SecretFormat;
+import tech.sarthakgoyal.bastionvault.service.SecretImportService;
+import tech.sarthakgoyal.bastionvault.service.SecretService;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
@@ -39,8 +52,16 @@ public class SettingsView extends VerticalLayout {
     private final AuthenticationContext auth;
     private final Span autoUnsealStatus = new Span();
 
+    private final SecretService secrets;
+    private final SecretImportService importer;
+    private final SecretCodec codec;
+
     public SettingsView(KeyManager keys, UnsealService unseal, AdminAccountService accounts, AuditService audit,
-            LegacyImportService legacy, AuthenticationContext auth) {
+            LegacyImportService legacy, AuthenticationContext auth, SecretService secrets,
+            SecretImportService importer, SecretCodec codec) {
+        this.secrets = secrets;
+        this.importer = importer;
+        this.codec = codec;
         this.keys = keys;
         this.unseal = unseal;
         this.audit = audit;
@@ -48,8 +69,8 @@ public class SettingsView extends VerticalLayout {
         setMaxWidth("900px");
 
         add(new H2("Settings"));
-        add(autoUnsealSection(), recoverySection(), masterPasswordSection(), loginPasswordSection(accounts),
-                legacySection(legacy));
+        add(backupSection(), autoUnsealSection(), recoverySection(), masterPasswordSection(),
+                loginPasswordSection(accounts), legacySection(legacy));
         updateStatus();
     }
 
@@ -69,6 +90,46 @@ public class SettingsView extends VerticalLayout {
         s.addClassName("glass-panel");
         s.setWidthFull();
         return s;
+    }
+
+    private VerticalLayout backupSection() {
+        VerticalLayout s = section("Export and import everything",
+                "A plaintext file of every group and value, as JSON or YAML. Use it to move secrets between "
+                        + "instances; for routine backups, back up PostgreSQL instead (it only holds ciphertext).");
+        PasswordField master = password("Master password");
+        Button export = new Button("Export everything", e -> {
+            if (!checkMaster(master)) {
+                return;
+            }
+            openExportDialog();
+        });
+        Button importAll = new Button("Import vault file",
+                e -> new VaultImportDialog(secrets, importer, codec, audit, admin()).open());
+        s.add(master, new HorizontalLayout(export, importAll));
+        return s;
+    }
+
+    /** Download links exist only while this dialog is open. */
+    private void openExportDialog() {
+        String admin = admin();
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Export everything");
+        HorizontalLayout links = new HorizontalLayout();
+        for (SecretFormat format : List.of(SecretFormat.JSON, SecretFormat.YAML)) {
+            Anchor link = new Anchor(DownloadHandler.fromInputStream(event -> {
+                byte[] body = codec.writeVault(secrets.exportAll(), format).getBytes(StandardCharsets.UTF_8);
+                audit.admin(admin, "EXPORT_ALL_" + format.name(), null, Outcome.SUCCESS);
+                return new DownloadResponse(new ByteArrayInputStream(body),
+                        "bastionvault-" + LocalDate.now() + format.extension(), format.contentType(), body.length);
+            }), "Download " + format.label());
+            link.getElement().setAttribute("download", true);
+            link.addClassName("export-link");
+            links.add(link);
+        }
+        dialog.add(new VerticalLayout(new Paragraph("The file contains every secret in plain text. Store it encrypted "
+                + "(for example with SOPS or in a password manager) and delete it when you are done."), links));
+        dialog.getFooter().add(new Button("Close", e -> dialog.close()));
+        dialog.open();
     }
 
     private VerticalLayout autoUnsealSection() {
@@ -198,6 +259,10 @@ public class SettingsView extends VerticalLayout {
     }
 
     private boolean checkMaster(PasswordField field) {
+        if (field.isEmpty()) {
+            UiSupport.error("Enter the master password first");
+            return false;
+        }
         try {
             boolean ok = unseal.verifyPassword(admin(), field.getValue());
             field.clear();

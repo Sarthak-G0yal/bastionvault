@@ -234,6 +234,79 @@ class VaultIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // ------------------------------------------------------------ JSON / YAML import and export
+
+    @Test
+    void exportGroupInEveryFormat() throws Exception {
+        String group = unique("exp");
+        secrets.put(group, "PORT", "5432", "test");
+        secrets.put(group, "PEM", "l1\nl2", "test");
+        String auth = "Bearer " + clientToken(unique("exporter"), group, true, false);
+
+        mvc.perform(get("/api/v1/export/" + group + "?format=json").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString(group + ".json")))
+                .andExpect(jsonPath("$.PORT").value("5432"));
+        mvc.perform(get("/api/v1/export/" + group + "?format=yaml").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("PORT: '5432'")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("PEM: |-")));
+        mvc.perform(get("/api/v1/export/" + group + "?format=env").header("Authorization", auth))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("PORT='5432'")));
+        mvc.perform(get("/api/v1/export/" + group + "?format=xml").header("Authorization", auth))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void importGroupDetectsFormatFromContentType() throws Exception {
+        String group = unique("impfmt");
+        String auth = "Bearer " + clientToken(unique("importer"), group, true, true);
+        mvc.perform(put("/api/v1/import/" + group).header("Authorization", auth)
+                        .contentType("application/yaml").content("ENABLED: yes\nZIP: 0123\n"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.created").value(2));
+        assertThat(secrets.get(group, "ENABLED")).contains("yes");
+        assertThat(secrets.get(group, "ZIP")).contains("0123");
+
+        mvc.perform(put("/api/v1/import/" + group + "?overwrite=true").header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"ZIP\": \"99999\", \"NEW\": \"x\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.created").value(1)).andExpect(jsonPath("$.updated").value(1));
+        assertThat(secrets.get(group, "ZIP")).contains("99999");
+
+        mvc.perform(put("/api/v1/import/" + group + "?format=json").header("Authorization", auth)
+                        .content("{broken"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void vaultExportOnlyContainsReadableGroups() throws Exception {
+        String mine = unique("vmine");
+        String other = unique("vother");
+        secrets.put(mine, "A", "1", "test");
+        secrets.put(other, "B", "2", "test");
+        String auth = "Bearer " + clientToken(unique("vexp"), mine, true, false);
+        String body = mvc.perform(get("/api/v1/export?format=json").header("Authorization", auth))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json.readTree(body).has(mine)).isTrue();
+        assertThat(json.readTree(body).has(other)).isFalse();
+    }
+
+    @Test
+    void vaultImportNeedsWriteOnEveryGroup() throws Exception {
+        String a = unique("via");
+        String b = unique("vib");
+        String auth = "Bearer " + clientToken(unique("vimp"), a, true, true);
+        String yaml = a + ":\n  K1: v1\n" + b + ":\n  K2: v2\n";
+        mvc.perform(put("/api/v1/import?format=yaml").header("Authorization", auth).content(yaml))
+                .andExpect(status().isForbidden());
+        assertThat(secrets.get(a, "K1")).isEmpty();
+
+        mvc.perform(put("/api/v1/import?format=yaml").header("Authorization", auth).content(a + ":\n  K1: v1\n"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.created").value(1));
+        assertThat(secrets.get(a, "K1")).contains("v1");
+    }
+
     // ------------------------------------------------------------ 3B: API keys
 
     @Test

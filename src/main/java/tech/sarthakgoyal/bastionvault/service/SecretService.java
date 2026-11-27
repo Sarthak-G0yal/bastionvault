@@ -96,6 +96,23 @@ public class SecretService {
         return secret.isPresent();
     }
 
+    /** Every group with all its values, ordered by group then key. Decrypts everything. */
+    public Map<String, Map<String, String>> exportAll() {
+        var dek = keys.dek();
+        Map<String, Map<String, String>> groups = new LinkedHashMap<>();
+        for (Secret s : repository.findAllByOrderByGroupNameAscSecretKeyAsc()) {
+            groups.computeIfAbsent(s.getGroupName(), g -> new LinkedHashMap<>())
+                    .put(s.getSecretKey(), SecretCipher.decrypt(dek, s.getGroupName(), s.getSecretKey(), s.getValueBlob()));
+        }
+        return groups;
+    }
+
+    /** Distinct group names, sorted. No decryption. */
+    public List<String> groupNames() {
+        return repository.findAllByOrderByGroupNameAscSecretKeyAsc().stream()
+                .map(Secret::getGroupName).distinct().toList();
+    }
+
     /** Keys that already exist in a group (no decryption). */
     public java.util.Set<String> existingKeys(String group) {
         java.util.Set<String> keys = new java.util.HashSet<>();

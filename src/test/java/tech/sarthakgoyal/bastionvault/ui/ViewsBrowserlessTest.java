@@ -93,7 +93,7 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     void importEnvFileThroughTheDialog() {
         secrets.put("ui-env", "KEEP", "original", "test");
         navigate(SecretsView.class);
-        test(button("Import .env")).click();
+        test(button("Import file")).click();
         Dialog dialog = $(Dialog.class).first();
         $(TextField.class, dialog).withCaption("Group").single().setValue("ui-env");
         String env = "KEEP=changed\nNEW_ONE=hello\nexport SECOND=\"two words\"\n";
@@ -108,6 +108,32 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
         assertThat(secrets.get("ui-env", "NEW_ONE")).contains("hello");
         assertThat(secrets.get("ui-env", "SECOND")).contains("two words");
         assertThat(secrets.get("ui-env", "KEEP")).contains("original");
+    }
+
+    @Test
+    void importYamlFileThroughTheDialog() {
+        navigate(SecretsView.class);
+        test(button("Import file")).click();
+        Dialog dialog = $(Dialog.class).first();
+        $(TextField.class, dialog).withCaption("Group").single().setValue("ui-yaml");
+        String yaml = "FLAG: yes\nCERT: |\n  a\n  b\n";
+        test($(com.vaadin.flow.component.upload.Upload.class, dialog).single())
+                .upload("config.yaml", "application/yaml", yaml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(test($(Grid.class, dialog).single()).size()).isEqualTo(2);
+        test($(Button.class, dialog).withCaptionContaining("Import ").single()).click();
+        assertThat(secrets.get("ui-yaml", "FLAG")).contains("yes");
+        assertThat(secrets.get("ui-yaml", "CERT")).contains("a\nb\n");
+    }
+
+    @Test
+    void exportEverythingNeedsTheMasterPassword() {
+        navigate(SettingsView.class);
+        test(button("Export everything")).click();
+        assertThat($(Dialog.class).all()).noneMatch(Dialog::isOpened);
+        $(PasswordField.class).withCaption("Master password").single().setValue(TestFixtures.MASTER);
+        test(button("Export everything")).click();
+        Dialog dialog = $(Dialog.class).first();
+        assertThat($(com.vaadin.flow.component.html.Anchor.class, dialog).all()).hasSize(2);
     }
 
     @Test

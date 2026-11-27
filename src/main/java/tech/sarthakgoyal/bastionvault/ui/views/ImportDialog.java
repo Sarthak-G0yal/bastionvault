@@ -13,6 +13,7 @@ import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.server.streams.UploadHandler;
@@ -20,23 +21,26 @@ import com.vaadin.flow.server.streams.UploadHandler;
 import tech.sarthakgoyal.bastionvault.domain.AuditEvent.ActorType;
 import tech.sarthakgoyal.bastionvault.domain.AuditEvent.Outcome;
 import tech.sarthakgoyal.bastionvault.service.AuditService;
-import tech.sarthakgoyal.bastionvault.service.EnvImportService;
-import tech.sarthakgoyal.bastionvault.service.EnvParser;
+import tech.sarthakgoyal.bastionvault.service.SecretCodec;
+import tech.sarthakgoyal.bastionvault.service.SecretFormat;
+import tech.sarthakgoyal.bastionvault.service.SecretImportService;
 import tech.sarthakgoyal.bastionvault.service.Names;
 import tech.sarthakgoyal.bastionvault.service.SecretService;
 import tech.sarthakgoyal.bastionvault.ui.UiSupport;
 
 /**
- * Upload a .env file into one group. The file is parsed in memory, shown as a preview (keys only,
- * values masked), and nothing is stored until "Import" is clicked.
+ * Upload a .env, JSON or YAML file into one group. The file is parsed in memory, shown as a preview
+ * (keys only, values masked), and nothing is stored until "Import" is clicked.
  */
-class EnvImportDialog extends Dialog {
+class ImportDialog extends Dialog {
 
     private record Row(String key, int length, boolean exists) {
     }
 
     private final SecretService secrets;
-    private final EnvImportService importer;
+    private final SecretImportService importer;
+    private final SecretCodec codec;
+    private final Select<SecretFormat> format = new Select<>();
     private final AuditService audit;
     private final String admin;
     private final Runnable onImported;
@@ -48,18 +52,20 @@ class EnvImportDialog extends Dialog {
     private final VerticalLayout warnings = new VerticalLayout();
     private final Button importButton = new Button("Import");
 
-    private EnvParser.Result parsed;
+    private SecretCodec.Parsed parsed;
     private String fileName;
+    private byte[] fileData;
 
-    EnvImportDialog(SecretService secrets, EnvImportService importer, AuditService audit, String admin,
-            String initialGroup, Runnable onImported) {
+    ImportDialog(SecretService secrets, SecretImportService importer, SecretCodec codec, AuditService audit,
+            String admin, String initialGroup, Runnable onImported) {
         this.secrets = secrets;
         this.importer = importer;
+        this.codec = codec;
         this.audit = audit;
         this.admin = admin;
         this.onImported = onImported;
 
-        setHeaderTitle("Import .env file");
+        setHeaderTitle("Import file");
         setWidth("760px");
 
         group.setValue(initialGroup == null ? "" : initialGroup);
@@ -70,8 +76,20 @@ class EnvImportDialog extends Dialog {
 
         Upload upload = new Upload(UploadHandler.inMemory((metadata, data) -> onFile(metadata.fileName(), data)));
         upload.setMaxFiles(1);
-        upload.setMaxFileSize(EnvParser.MAX_BYTES);
-        upload.setAcceptedFileTypes(".env", "text/plain", "application/octet-stream");
+        upload.setMaxFileSize(SecretCodec.MAX_GROUP_BYTES);
+        upload.setAcceptedFileTypes(".env", ".json", ".yaml", ".yml", "text/plain", "application/json",
+                "application/yaml", "application/octet-stream");
+
+        format.setLabel("Format");
+        format.setItems(SecretFormat.values());
+        format.setItemLabelGenerator(SecretFormat::label);
+        format.setHelperText("Detected from the file name; change it if the guess is wrong");
+        format.setValue(SecretFormat.ENV);
+        format.addValueChangeListener(e -> {
+            if (e.isFromClient() && fileData != null) {
+                parse();
+            }
+        });
         upload.setDropAllowed(true);
         upload.setWidthFull();
         upload.addFileRejectedListener(e -> UiSupport.error(e.getErrorMessage()));
@@ -92,25 +110,33 @@ class EnvImportDialog extends Dialog {
         Button cancel = new Button("Cancel", e -> close());
 
         add(new VerticalLayout(
-                new Paragraph("Each KEY=value line becomes a secret in the group. Quotes, export, comments and "
-                        + "multi-line values follow Docker Compose rules. The file is read in memory only and is "
+                new Paragraph("Each key in the file becomes a secret in the group: KEY=value lines (.env), "
+                        + "a flat JSON object or a flat YAML mapping. The file is read in memory only and is "
                         + "not stored."),
-                group, upload, overwrite, summary, preview, warnings));
+                group, upload, format, overwrite, summary, preview, warnings));
         getFooter().add(cancel, importButton);
         // Drop the parsed values as soon as the dialog closes, whatever the reason.
         addOpenedChangeListener(e -> {
             if (!e.isOpened()) {
                 parsed = null;
+                fileData = null;
             }
         });
     }
 
     private void onFile(String name, byte[] data) {
+        fileName = name;
+        fileData = data;
+        format.setValue(SecretFormat.fromFileName(name));
+        parse();
+    }
+
+    private void parse() {
         try {
-            parsed = EnvParser.parse(data);
-            fileName = name;
+            parsed = codec.readGroup(new String(fileData, java.nio.charset.StandardCharsets.UTF_8), format.getValue());
         } catch (IllegalArgumentException ex) {
-            clear();
+            parsed = null;
+            refreshPreview();
             UiSupport.error(ex.getMessage());
             return;
         }
@@ -120,6 +146,7 @@ class EnvImportDialog extends Dialog {
     private void clear() {
         parsed = null;
         fileName = null;
+        fileData = null;
         refreshPreview();
     }
 
@@ -170,10 +197,10 @@ class EnvImportDialog extends Dialog {
         String g = group.getValue().trim();
         try {
             Map<String, String> entries = parsed.entries();
-            EnvImportService.Result result = importer.importEntries(g, entries, overwrite.getValue(),
+            SecretImportService.Result result = importer.importEntries(g, entries, overwrite.getValue(),
                     "admin:" + admin, parsed.warnings());
-            audit.record(ActorType.ADMIN, admin, "IMPORT_ENV", g, Outcome.SUCCESS,
-                    "file=" + fileName + " created=" + result.created() + " updated=" + result.updated()
+            audit.record(ActorType.ADMIN, admin, "IMPORT", g, Outcome.SUCCESS,
+                    "file=" + fileName + " format=" + format.getValue().id() + " created=" + result.created() + " updated=" + result.updated()
                             + " skipped=" + result.skippedExisting());
             String message = "Imported into " + g + ": " + result.created() + " created, " + result.updated()
                     + " updated, " + result.skippedExisting() + " skipped";

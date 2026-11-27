@@ -15,8 +15,10 @@ import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
+import com.vaadin.flow.component.html.Anchor;
 import com.vaadin.flow.component.html.H2;
 import com.vaadin.flow.component.html.Paragraph;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -24,6 +26,8 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.DownloadResponse;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 
@@ -31,7 +35,9 @@ import jakarta.annotation.security.RolesAllowed;
 import tech.sarthakgoyal.bastionvault.domain.AuditEvent.Outcome;
 import tech.sarthakgoyal.bastionvault.domain.Secret;
 import tech.sarthakgoyal.bastionvault.service.AuditService;
-import tech.sarthakgoyal.bastionvault.service.EnvImportService;
+import tech.sarthakgoyal.bastionvault.service.SecretCodec;
+import tech.sarthakgoyal.bastionvault.service.SecretFormat;
+import tech.sarthakgoyal.bastionvault.service.SecretImportService;
 import tech.sarthakgoyal.bastionvault.service.SecretService;
 import tech.sarthakgoyal.bastionvault.ui.UiSupport;
 import tech.sarthakgoyal.bastionvault.ui.layout.MainLayout;
@@ -48,7 +54,8 @@ public class SecretsView extends VerticalLayout {
     private final SecretService secrets;
     private final AuditService audit;
     private final AuthenticationContext auth;
-    private final EnvImportService envImport;
+    private final SecretImportService importer;
+    private final SecretCodec codec;
 
     private final TextField group = new TextField("Group");
     private final TextField key = new TextField("Key");
@@ -57,9 +64,10 @@ public class SecretsView extends VerticalLayout {
     private final Accordion groups = new Accordion();
 
     public SecretsView(SecretService secrets, AuditService audit, AuthenticationContext auth,
-            EnvImportService envImport) {
+            SecretImportService importer, SecretCodec codec) {
         this.secrets = secrets;
-        this.envImport = envImport;
+        this.importer = importer;
+        this.codec = codec;
         this.audit = audit;
         this.auth = auth;
         setSizeFull();
@@ -73,8 +81,8 @@ public class SecretsView extends VerticalLayout {
         Button save = new Button("Encrypt & save", VaadinIcon.LOCK.create(), e -> save());
         save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         Button generate = new Button("Generate random (32)", VaadinIcon.MAGIC.create(), e -> generate());
-        Button importEnv = new Button("Import .env", VaadinIcon.UPLOAD.create(),
-                e -> new EnvImportDialog(secrets, envImport, audit, UiSupport.admin(auth), group.getValue().trim(),
+        Button importFile = new Button("Import file", VaadinIcon.UPLOAD.create(),
+                e -> new ImportDialog(secrets, importer, codec, audit, UiSupport.admin(auth), group.getValue().trim(),
                         this::refresh).open());
 
         FormLayout form = new FormLayout(group, key, value);
@@ -87,7 +95,7 @@ public class SecretsView extends VerticalLayout {
         filter.setPrefixComponent(VaadinIcon.SEARCH.create());
 
         groups.setWidthFull();
-        add(new H2("Secrets"), form, new HorizontalLayout(save, generate, importEnv), filter, groups);
+        add(new H2("Secrets"), form, new HorizontalLayout(save, generate, importFile), filter, groups);
         refresh();
     }
 
@@ -133,7 +141,31 @@ public class SecretsView extends VerticalLayout {
             groups.add("No secrets yet", new Paragraph("Add one with the form above."));
             return;
         }
-        byGroup.forEach((name, list) -> groups.add(name + " (" + list.size() + ")", grid(list)));
+        byGroup.forEach((name, list) -> groups.add(name + " (" + list.size() + ")",
+                new VerticalLayout(exportLinks(name), grid(list))));
+    }
+
+    /** Download links for one group. The file is generated on click, audited, and never cached. */
+    private HorizontalLayout exportLinks(String groupName) {
+        String admin = UiSupport.admin(auth);
+        HorizontalLayout links = new HorizontalLayout();
+        links.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
+        Span label = new Span("Export");
+        label.addClassName("muted");
+        links.add(label);
+        for (SecretFormat format : SecretFormat.values()) {
+            Anchor link = new Anchor(DownloadHandler.fromInputStream(event -> {
+                byte[] body = codec.writeGroup(secrets.getGroup(groupName), format)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                audit.admin(admin, "EXPORT_" + format.name(), groupName, Outcome.SUCCESS);
+                return new DownloadResponse(new java.io.ByteArrayInputStream(body), groupName + format.extension(),
+                        format.contentType(), body.length);
+            }), format.label());
+            link.getElement().setAttribute("download", true);
+            link.addClassName("export-link");
+            links.add(link);
+        }
+        return links;
     }
 
     private Grid<Secret> grid(List<Secret> items) {
