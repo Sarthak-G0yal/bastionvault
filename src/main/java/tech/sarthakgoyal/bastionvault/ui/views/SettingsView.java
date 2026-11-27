@@ -5,28 +5,24 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.html.Anchor;
-import com.vaadin.flow.server.streams.DownloadHandler;
-import com.vaadin.flow.server.streams.DownloadResponse;
-import tech.sarthakgoyal.bastionvault.service.SecretCodec;
-import tech.sarthakgoyal.bastionvault.service.SecretFormat;
-import tech.sarthakgoyal.bastionvault.service.SecretImportService;
-import tech.sarthakgoyal.bastionvault.service.SecretService;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
+import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.html.Anchor;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.server.streams.DownloadHandler;
+import com.vaadin.flow.server.streams.DownloadResponse;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 
 import jakarta.annotation.security.RolesAllowed;
@@ -36,41 +32,47 @@ import tech.sarthakgoyal.bastionvault.service.AdminAccountService;
 import tech.sarthakgoyal.bastionvault.service.AuditService;
 import tech.sarthakgoyal.bastionvault.service.LegacyImportService;
 import tech.sarthakgoyal.bastionvault.service.Names;
+import tech.sarthakgoyal.bastionvault.service.SecretCodec;
+import tech.sarthakgoyal.bastionvault.service.SecretFormat;
+import tech.sarthakgoyal.bastionvault.service.SecretImportService;
+import tech.sarthakgoyal.bastionvault.service.SecretService;
 import tech.sarthakgoyal.bastionvault.service.UnsealService;
 import tech.sarthakgoyal.bastionvault.ui.UiSupport;
 import tech.sarthakgoyal.bastionvault.ui.layout.MainLayout;
 
-/** Key management (auto-unseal, recovery key, master password), login password, legacy import. */
+/** Export/import, key management (auto-unseal, recovery key, master password), login password, legacy import. */
 @Route(value = "settings", layout = MainLayout.class)
 @PageTitle("Settings | BastionVault")
 @RolesAllowed("ADMIN")
-public class SettingsView extends VerticalLayout {
+public class SettingsView extends Div {
 
     private final KeyManager keys;
     private final UnsealService unseal;
     private final AuditService audit;
     private final AuthenticationContext auth;
-    private final Span autoUnsealStatus = new Span();
-
     private final SecretService secrets;
     private final SecretImportService importer;
     private final SecretCodec codec;
+    private final Span autoUnsealStatus = new Span();
 
     public SettingsView(KeyManager keys, UnsealService unseal, AdminAccountService accounts, AuditService audit,
             LegacyImportService legacy, AuthenticationContext auth, SecretService secrets,
             SecretImportService importer, SecretCodec codec) {
-        this.secrets = secrets;
-        this.importer = importer;
-        this.codec = codec;
         this.keys = keys;
         this.unseal = unseal;
         this.audit = audit;
         this.auth = auth;
-        setMaxWidth("900px");
+        this.secrets = secrets;
+        this.importer = importer;
+        this.codec = codec;
+        setWidthFull();
 
-        add(new H2("Settings"));
-        add(backupSection(), autoUnsealSection(), recoverySection(), masterPasswordSection(),
+        Div grid = new Div(backupSection(), autoUnsealSection(), recoverySection(), masterPasswordSection(),
                 loginPasswordSection(accounts), legacySection(legacy));
+        grid.addClassName("bv-settings");
+        Div page = UiSupport.page();
+        page.add(UiSupport.header("Settings", "Keys, backups and your sign-in"), grid);
+        add(page);
         updateStatus();
     }
 
@@ -80,33 +82,31 @@ public class SettingsView extends VerticalLayout {
 
     private void updateStatus() {
         boolean on = keys.hasAutoUnseal();
-        autoUnsealStatus.setText(on ? "enabled" : "disabled");
-        autoUnsealStatus.getElement().getThemeList().clear();
-        autoUnsealStatus.getElement().getThemeList().add(on ? "badge success" : "badge contrast");
+        autoUnsealStatus.setText(on ? "On" : "Off");
+        autoUnsealStatus.setClassName(on ? "bv-status warn" : "bv-status");
     }
 
-    private VerticalLayout section(String title, String text) {
-        VerticalLayout s = new VerticalLayout(new H3(title), new Paragraph(text));
-        s.addClassName("glass-panel");
-        s.setWidthFull();
-        return s;
+    private Div section(String title, String text, Component... content) {
+        H2 h = new H2(title);
+        h.addClassName("bv-section-title");
+        Div card = UiSupport.card(h, new Paragraph(text));
+        card.add(content);
+        return card;
     }
 
-    private VerticalLayout backupSection() {
-        VerticalLayout s = section("Export and import everything",
-                "A plaintext file of every group and value, as JSON or YAML. Use it to move secrets between "
-                        + "instances; for routine backups, back up PostgreSQL instead (it only holds ciphertext).");
+    private Div backupSection() {
         PasswordField master = password("Master password");
-        Button export = new Button("Export everything", e -> {
-            if (!checkMaster(master)) {
-                return;
+        Button export = UiSupport.secondary("Export everything", "download", e -> {
+            if (checkMaster(master)) {
+                openExportDialog();
             }
-            openExportDialog();
         });
-        Button importAll = new Button("Import vault file",
+        Button importAll = UiSupport.secondary("Import vault file", "upload",
                 e -> new VaultImportDialog(secrets, importer, codec, audit, admin()).open());
-        s.add(master, new HorizontalLayout(export, importAll));
-        return s;
+        return section("Export and import everything",
+                "A plaintext JSON or YAML file of every group, for moving secrets between instances. Routine "
+                        + "backups should copy PostgreSQL instead, which only holds ciphertext.",
+                master, row(export, importAll));
     }
 
     /** Download links exist only while this dialog is open. */
@@ -114,7 +114,9 @@ public class SettingsView extends VerticalLayout {
         String admin = admin();
         Dialog dialog = new Dialog();
         dialog.setHeaderTitle("Export everything");
-        HorizontalLayout links = new HorizontalLayout();
+        dialog.setWidth("480px");
+        Div links = new Div();
+        links.addClassName("bv-actions");
         for (SecretFormat format : List.of(SecretFormat.JSON, SecretFormat.YAML)) {
             Anchor link = new Anchor(DownloadHandler.fromInputStream(event -> {
                 byte[] body = codec.writeVault(secrets.exportAll(), format).getBytes(StandardCharsets.UTF_8);
@@ -126,18 +128,17 @@ public class SettingsView extends VerticalLayout {
             link.addClassName("export-link");
             links.add(link);
         }
-        dialog.add(new VerticalLayout(new Paragraph("The file contains every secret in plain text. Store it encrypted "
-                + "(for example with SOPS or in a password manager) and delete it when you are done."), links));
-        dialog.getFooter().add(new Button("Close", e -> dialog.close()));
+        Paragraph warning = new Paragraph("The file holds every secret in plain text. Encrypt it (SOPS, a password "
+                + "manager) and delete the download when you are done.");
+        warning.addClassName("muted");
+        dialog.add(new VerticalLayout(warning, links));
+        dialog.getFooter().add(UiSupport.primary("Close", null, e -> dialog.close()));
         dialog.open();
     }
 
-    private VerticalLayout autoUnsealSection() {
-        VerticalLayout s = section("Auto-unseal",
-                "With auto-unseal the vault unseals itself on start from VAULT_UNSEAL_KEY_FILE (a mounted "
-                        + "Kubernetes Secret, kept in git with SOPS). Anyone who controls the cluster can then read "
-                        + "the vault. The master password and recovery key keep working.");
-        Button enable = new Button("Generate new unseal key", e -> confirm("Generate a new unseal key?",
+    private Div autoUnsealSection() {
+        Button enable = UiSupport.secondary("Generate unseal key", "key-round", e -> confirm(
+                "Generate a new unseal key?",
                 "Any previous unseal key stops working. Update the Kubernetes Secret before the next restart.", () -> {
                     String key = keys.enableAutoUnseal();
                     audit.admin(admin(), "ENABLE_AUTO_UNSEAL", null, Outcome.SUCCESS);
@@ -145,23 +146,25 @@ public class SettingsView extends VerticalLayout {
                     UiSupport.showOnce("Unseal key",
                             "Store it as a Kubernetes Secret file and point VAULT_UNSEAL_KEY_FILE at it.", key, null);
                 }));
-        enable.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        Button disable = new Button("Disable", e -> confirm("Disable auto-unseal?",
+        Button disable = new Button("Turn off", e -> confirm("Turn off auto-unseal?",
                 "After the next restart the vault stays sealed until you unseal it here.", () -> {
                     keys.disableAutoUnseal();
                     audit.admin(admin(), "DISABLE_AUTO_UNSEAL", null, Outcome.SUCCESS);
                     updateStatus();
                 }));
-        disable.addThemeVariants(ButtonVariant.LUMO_ERROR, ButtonVariant.LUMO_TERTIARY);
-        s.add(new HorizontalLayout(new Span("Status:"), autoUnsealStatus), new HorizontalLayout(enable, disable));
-        return s;
+        disable.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ERROR);
+        Span label = new Span("Status");
+        label.addClassName("muted");
+        return section("Auto-unseal",
+                "Unseals the vault on start from VAULT_UNSEAL_KEY_FILE, a mounted Kubernetes Secret kept in git with "
+                        + "SOPS. Anyone who controls the cluster can then read the vault. The master password and "
+                        + "recovery key keep working.",
+                row(label, autoUnsealStatus), row(enable, disable));
     }
 
-    private VerticalLayout recoverySection() {
-        VerticalLayout s = section("Recovery key",
-                "Unseals the vault if the master password is lost. Regenerating it invalidates the old one.");
+    private Div recoverySection() {
         PasswordField master = password("Current master password");
-        Button regenerate = new Button("Regenerate recovery key", e -> {
+        Button regenerate = UiSupport.secondary("Regenerate recovery key", "refresh-cw", e -> {
             if (!checkMaster(master)) {
                 return;
             }
@@ -169,17 +172,15 @@ public class SettingsView extends VerticalLayout {
             audit.admin(admin(), "REGENERATE_RECOVERY_KEY", null, Outcome.SUCCESS);
             UiSupport.showOnce("New recovery key", "Store it offline. The old recovery key no longer works.", key, null);
         });
-        s.add(master, regenerate);
-        return s;
+        return section("Recovery key", "Unseals the vault if the master password is lost. Regenerating it "
+                + "invalidates the old one.", master, row(regenerate));
     }
 
-    private VerticalLayout masterPasswordSection() {
-        VerticalLayout s = section("Master password",
-                "Re-wraps the data key with the new password. Secrets are not re-encrypted.");
+    private Div masterPasswordSection() {
         PasswordField current = password("Current master password");
         PasswordField next = password("New master password");
         PasswordField repeat = password("Repeat new master password");
-        Button change = new Button("Change master password", e -> {
+        Button change = UiSupport.secondary("Change master password", null, e -> {
             if (!next.getValue().equals(repeat.getValue())) {
                 UiSupport.error("The new passwords do not match");
                 return;
@@ -199,16 +200,15 @@ public class SettingsView extends VerticalLayout {
             repeat.clear();
             UiSupport.success("Master password changed");
         });
-        s.add(current, next, repeat, change);
-        return s;
+        return section("Master password", "Re-wraps the data key with the new password. Secrets are not "
+                + "re-encrypted.", current, next, repeat, row(change));
     }
 
-    private VerticalLayout loginPasswordSection(AdminAccountService accounts) {
-        VerticalLayout s = section("Login password", "The password for signing in to this UI as " + admin() + ".");
+    private Div loginPasswordSection(AdminAccountService accounts) {
         PasswordField current = password("Current login password");
         PasswordField next = password("New login password");
         PasswordField repeat = password("Repeat new login password");
-        Button change = new Button("Change login password", e -> {
+        Button change = UiSupport.secondary("Change login password", null, e -> {
             if (!next.getValue().equals(repeat.getValue())) {
                 UiSupport.error("The new passwords do not match");
                 return;
@@ -223,21 +223,19 @@ public class SettingsView extends VerticalLayout {
                 UiSupport.error(ex.getMessage());
             }
         });
-        s.add(current, next, repeat, change);
-        return s;
+        return section("Login password", "The password for signing in to this page as " + admin() + ".",
+                current, next, repeat, row(change));
     }
 
-    private VerticalLayout legacySection(LegacyImportService legacy) {
-        VerticalLayout s = section("Import from BastionVault 0.1 (MongoDB)",
-                "Run: mongoexport --uri \"$MONGO_URI\" --collection secrets --jsonArray, paste the output, and "
-                        + "enter the old master password and old VAULT_SALT. Values are re-encrypted with AES-GCM.");
+    private Div legacySection(LegacyImportService legacy) {
         TextArea export = new TextArea("mongoexport output");
         export.setWidthFull();
-        export.setMaxHeight("14em");
+        export.setMaxHeight("12em");
+        export.addClassName("mono");
         PasswordField oldPassword = password("Old master password");
         PasswordField oldSalt = password("Old VAULT_SALT");
         Checkbox overwrite = new Checkbox("Overwrite secrets that already exist");
-        Button run = new Button("Import", e -> {
+        Button run = UiSupport.secondary("Import", "upload", e -> {
             try {
                 var result = legacy.importMongoExport(export.getValue(), oldPassword.getValue(), oldSalt.getValue(),
                         overwrite.getValue(), "admin:" + admin());
@@ -254,8 +252,18 @@ public class SettingsView extends VerticalLayout {
                 UiSupport.error(ex.getMessage());
             }
         });
-        s.add(export, oldPassword, oldSalt, overwrite, run);
-        return s;
+        return section("Import from BastionVault 0.1",
+                "Paste the output of mongoexport --collection secrets --jsonArray and enter the old master password "
+                        + "and VAULT_SALT. Values are re-encrypted with AES-GCM.",
+                export, oldPassword, oldSalt, overwrite, row(run));
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private static Div row(Component... children) {
+        Div row = new Div(children);
+        row.addClassName("bv-actions");
+        return row;
     }
 
     private boolean checkMaster(PasswordField field) {
@@ -278,7 +286,7 @@ public class SettingsView extends VerticalLayout {
 
     private PasswordField password(String label) {
         PasswordField field = new PasswordField(label);
-        field.setWidth("360px");
+        field.setWidthFull();
         UiSupport.noAutofill(field);
         return field;
     }

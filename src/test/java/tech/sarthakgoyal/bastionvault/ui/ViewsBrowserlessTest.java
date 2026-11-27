@@ -52,18 +52,25 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
         return $(Button.class).withCaption(caption).first();
     }
 
+    /** The topmost open dialog (show-once dialogs open after the form dialog closes). */
+    private Dialog openDialog() {
+        return $(Dialog.class).withCondition(Dialog::isOpened).last();
+    }
+
     @Test
     void sealedVaultForcesTheUnsealPage() {
         keys.seal();
         navigate("", UnsealView.class); // the layout forwards any protected page to /unseal
 
-        PasswordField secret = $(PasswordField.class).single();
+        // the vault door, not the sidebar card (which also has an "Unseal" button that only navigates)
+        PasswordField secret = $view(PasswordField.class).single();
+        Button unsealButton = $view(Button.class).withCaption("Unseal").single();
         secret.setValue("definitely-wrong");
-        test(button("Unseal")).click();
+        test(unsealButton).click();
         assertThat(keys.isSealed()).isTrue();
 
         secret.setValue(TestFixtures.MASTER);
-        test(button("Unseal")).click();
+        test(unsealButton).click();
         assertThat(keys.isSealed()).isFalse();
         assertThat(getCurrentView()).isInstanceOf(SecretsView.class);
     }
@@ -71,20 +78,18 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     @Test
     void saveAndRevealASecret() {
         navigate(SecretsView.class);
-        $(TextField.class).withCaption("Group").single().setValue("ui-group");
-        $(TextField.class).withCaption("Key").single().setValue("UI_KEY");
-        $(TextArea.class).withCaption("Value").single().setValue("multi\nline");
-        test(button("Encrypt & save")).click();
+        test(button("New secret")).click();
+        Dialog editor = openDialog();
+        $(TextField.class, editor).withCaption("Group").single().setValue("ui-group");
+        $(TextField.class, editor).withCaption("Key").single().setValue("UI_KEY");
+        $(TextArea.class, editor).withCaption("Value").single().setValue("multi\nline");
+        test($(Button.class, editor).withCaption("Save secret").single()).click();
         assertThat(secrets.get("ui-group", "UI_KEY")).contains("multi\nline");
 
-        // Narrow the list to our group, then click "Reveal" in the grid's actions column.
-        $(TextField.class).withPropertyValue(TextField::getPlaceholder, "Filter groups and keys").single()
-                .setValue("ui-group");
-        @SuppressWarnings("unchecked")
-        Grid<Object> grid = $(Grid.class).single();
-        var actions = test(grid).getCellComponent(0, 4);
-        test($(Button.class, actions).withCaption("Reveal").single()).click();
-        Dialog dialog = $(Dialog.class).first();
+        // Searching opens the matching group box; its rows have icon buttons labelled for screen readers.
+        $(TextField.class).withPropertyValue(TextField::getPlaceholder, "Search").single().setValue("ui-group");
+        test($(Button.class).withAttribute("aria-label", "Reveal").first()).click();
+        Dialog dialog = openDialog();
         assertThat(dialog.isOpened()).isTrue();
         assertThat($(TextArea.class, dialog).single().getValue()).isEqualTo("multi\nline");
     }
@@ -132,18 +137,20 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
         assertThat($(Dialog.class).all()).noneMatch(Dialog::isOpened);
         $(PasswordField.class).withCaption("Master password").single().setValue(TestFixtures.MASTER);
         test(button("Export everything")).click();
-        Dialog dialog = $(Dialog.class).first();
+        Dialog dialog = openDialog();
         assertThat($(com.vaadin.flow.component.html.Anchor.class, dialog).all()).hasSize(2);
     }
 
     @Test
     void createClientShowsTheSecretOnce() {
         navigate(ClientsView.class);
-        $(TextField.class).withCaption("Client ID").single().setValue("ui-client");
-        $(TextField.class).withCaption("Display name").single().setValue("From the UI");
-        test(button("Create client")).click();
+        test(button("New client")).click();
+        Dialog form = openDialog();
+        $(TextField.class, form).withCaption("Client ID").single().setValue("ui-client");
+        $(TextField.class, form).withCaption("Display name").single().setValue("From the UI");
+        test($(Button.class, form).withCaption("Create client").single()).click();
         assertThat(clients.list()).anyMatch(c -> c.getClientId().equals("ui-client"));
-        Dialog dialog = $(Dialog.class).first();
+        Dialog dialog = openDialog();
         assertThat($(TextArea.class, dialog).single().getValue()).hasSizeGreaterThan(30);
         assertThat($(Button.class, dialog).withCaption("Done").single().isEnabled()).isFalse();
     }
@@ -151,10 +158,10 @@ class ViewsBrowserlessTest extends SpringBrowserlessTest {
     @Test
     void enableAutoUnsealFromSettings() {
         navigate(SettingsView.class);
-        test(button("Generate new unseal key")).click();
+        test(button("Generate unseal key")).click();
         test($(ConfirmDialog.class).first()).confirm();
         assertThat(keys.hasAutoUnseal()).isTrue();
-        String key = $(TextArea.class, $(Dialog.class).first()).single().getValue();
+        String key = $(TextArea.class, openDialog()).single().getValue();
         assertThat(key).startsWith("bvu_");
         keys.seal();
         assertThat(keys.unsealWithUnsealKey(key)).isTrue();

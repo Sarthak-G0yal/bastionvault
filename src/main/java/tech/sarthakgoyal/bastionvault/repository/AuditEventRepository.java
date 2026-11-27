@@ -14,6 +14,8 @@ import tech.sarthakgoyal.bastionvault.domain.AuditEvent;
 public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
     List<AuditEvent> findAllByOrderByOccurredAtDesc(Pageable pageable);
 
+    List<AuditEvent> findByActorTypeAndOccurredAtAfterOrderByOccurredAtDesc(String actorType, Instant after);
+
     @Modifying
     @Transactional
     @Query("delete from AuditEvent e where e.occurredAt < :cutoff")

@@ -39,6 +39,7 @@ public class KeyManager {
     private final ApplicationEventPublisher events;
 
     private volatile SecretKey dek;
+    private volatile java.time.Instant unsealedAt;
 
     public KeyManager(VaultConfigRepository configRepository, VaultProperties properties,
             ApplicationEventPublisher events) {
@@ -70,8 +71,14 @@ public class KeyManager {
         return key;
     }
 
+    /** When the vault was last unsealed, or null while sealed. */
+    public java.time.Instant unsealedAt() {
+        return dek == null ? null : unsealedAt;
+    }
+
     public void seal() {
         dek = null;
+        unsealedAt = null;
         events.publishEvent(new VaultSealedEvent());
     }
 
@@ -96,6 +103,7 @@ public class KeyManager {
             config.setDekByRecovery(Aead.seal(Aead.key(rawRecovery), rawDek, AAD_RECOVERY));
             configRepository.save(config);
             dek = Aead.key(rawDek);
+            unsealedAt = java.time.Instant.now();
             return KeyCodec.formatRecoveryKey(rawRecovery);
         } finally {
             Arrays.fill(rawDek, (byte) 0);
@@ -167,6 +175,7 @@ public class KeyManager {
         }
         try {
             dek = Aead.key(rawDek);
+            unsealedAt = java.time.Instant.now();
             return true;
         } finally {
             Arrays.fill(rawDek, (byte) 0);

@@ -1,135 +1,754 @@
+/* BastionVault UI
+ * Direction: a strongroom of safe-deposit boxes. Exact, guarded, unhurried.
+ * Warm light ramp for every surface, near-black for primary actions, the brand orange only for
+ * the seal state, the current day in the chart and the nav marker. Secret addresses in mono.
+ * Redesigned with unslop by Damir Sokolovsky (@heydamir), CC BY 4.0.
+ */
+
+@font-face {
+    font-family: "Geist";
+    src: url("fonts/Geist-Variable.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    src: url("fonts/GeistMono-Variable.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+}
 
 html {
-    /* Natively enforce Dark Mode */
-    color-scheme: dark;
-    
-    /* AURA & VAADIN GLOBALS */
-    --vaadin-primary-color: #fe742a; /* Your Orange */
-    --vaadin-primary-text-color: #fe742a;
-    --vaadin-error-color: #772f1a; /* Your Crimson */
-    
-    /* Make Vaadin's default surface transparent so our gradient shows */
-    --vaadin-app-layout-background: transparent;
-    --vaadin-app-layout-navbar-background: transparent;
-    --vaadin-surface-color: transparent;
-    
-    --vaadin-border-radius: 12px; /* Softer, modern corners */
+    color-scheme: light;
+
+    /* ---- ramp (warm, light) ---- */
+    --bv-page: #f7f4ee;
+    --bv-sidebar: #f1ece3;
+    --bv-card: #fdfbf7;
+    --bv-raised: #efe9df;
+    --bv-raised-strong: #e6dfd2;
+    --bv-line: rgba(31, 27, 22, 0.08);
+    --bv-line-strong: rgba(31, 27, 22, 0.14);
+    --bv-text: #1f1b16;
+    --bv-text-2: #5e554a;
+    --bv-muted: #7b7266;
+
+    /* ---- the one accent (brand orange) ---- */
+    --bv-accent: #fe742a;
+    --bv-accent-ink: #b4470f; /* orange as text on light surfaces, 5.2:1 */
+    --bv-accent-soft: rgba(254, 116, 42, 0.12);
+
+    /* ---- the dark contrast surface (seal state) ---- */
+    --bv-vault: #1f1b16;
+    --bv-vault-raised: #2b261f;
+    --bv-vault-text: #efe9de;
+    --bv-vault-muted: #aaa398;
+
+    /* ---- meaning only ---- */
+    --bv-positive: #16a34a;
+    --bv-negative: #dc2626;
+
+    --bv-font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --bv-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --bv-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --bv-radius-control: 8px;
+    --bv-radius-card: 14px;
+    --bv-radius-panel: 16px;
+
+    /* ---- Aura theme hooks ---- */
+    --aura-accent-color-light: #2a241d;
+    --aura-accent-color-dark: #2a241d;
+    --aura-background-color-light: var(--bv-page);
+    --aura-app-background: var(--bv-page);
+    --aura-font-family: var(--bv-font);
+    --aura-app-layout-inset: 0px;
+    --vaadin-focus-ring-color: var(--bv-accent-ink);
+    --vaadin-text-color: var(--bv-text);
+    --vaadin-text-color-secondary: var(--bv-text-2);
+    --vaadin-border-color: var(--bv-line-strong);
+    --vaadin-border-color-secondary: var(--bv-line);
+    --vaadin-app-layout-drawer-background: var(--bv-sidebar);
+    --vaadin-app-layout-navbar-background: var(--bv-page);
+    --vaadin-dialog-background: var(--bv-card);
+    --vaadin-dialog-border-radius: var(--bv-radius-panel);
+
+    font-family: var(--bv-font);
+    font-size: 14px;
+    background: var(--bv-page);
+    color: var(--bv-text);
 }
 
-/* =========================================
-   RADIAL GRADIENT BACKGROUND
-   ========================================= */
 body {
-    /* Starts at Ice Blue/Teal mixed with deep green, fading to pitch black */
-    background: radial-gradient(circle at 10% 10%, #102a30 0%, #0c1713 40%, #050a08 100%);
-    background-attachment: fixed;
-    background-size: cover;
     margin: 0;
-    min-height: 100vh;
-    color: #f1e9db; /* Your Cream color for text */
+    background: var(--bv-page);
+    font-feature-settings: "ss01";
 }
 
-/* =========================================
-   GLASSMORPHISM (Frosted Glass Effect)
-   ========================================= */
-vaadin-grid, .glass-panel {
-    background: rgba(12, 23, 19, 0.4) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(93, 183, 222, 0.15) !important; 
-    border-radius: var(--vaadin-border-radius);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+h1, h2, h3, h4 {
+    font-weight: 500;
+    color: var(--bv-text);
+    margin: 0;
 }
 
-/* Make inputs look modern and glassy */
-vaadin-text-field, vaadin-password-field, vaadin-email-field {
-    --vaadin-input-field-background: rgba(241, 233, 219, 0.05);
-    --vaadin-input-field-border-color: rgba(254, 116, 42, 0.3); /* Subtle orange border */
+/* ============================================================ shell */
+
+vaadin-app-layout::part(drawer) {
+    border-inline-end: 1px solid var(--bv-line);
+    width: 248px;
 }
 
-/* =========================================
-   BUTTON GLOW & TACTILE HOVER
-   ========================================= */
+vaadin-app-layout::part(navbar) {
+    border-bottom: none;
+    min-height: 0;
+}
+
+.bv-navbar {
+    display: none;
+    padding: 8px 16px;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 1024px) {
+    .bv-navbar { display: flex; }
+}
+
+.bv-sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 20px 12px 16px;
+}
+
+.bv-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--bv-text);
+}
+
+.bv-brand-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--bv-vault);
+    color: var(--bv-vault-text);
+    display: grid;
+    place-items: center;
+}
+
+.bv-nav-label {
+    padding: 0 8px;
+    margin: 16px 0 8px;
+    font-size: 12px;
+    color: var(--bv-muted);
+}
+
+.bv-nav-label:first-of-type { margin-top: 0; }
+
+vaadin-side-nav-item::part(content) {
+    min-height: 36px;
+    border-radius: var(--bv-radius-control);
+    padding-inline: 8px;
+    gap: 10px;
+    color: var(--bv-text-2);
+    transition: background-color 150ms var(--bv-ease), color 150ms var(--bv-ease);
+}
+
+vaadin-side-nav-item:hover::part(content) { background: var(--bv-raised); color: var(--bv-text); }
+
+vaadin-side-nav-item[current]::part(content) {
+    background: var(--bv-card);
+    color: var(--bv-text);
+    box-shadow: inset 0 0 0 1px var(--bv-line), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+vaadin-side-nav-item[current] > [slot="prefix"] { color: var(--bv-accent-ink); }
+vaadin-side-nav-item > [slot="prefix"] { color: var(--bv-muted); }
+
+.bv-sidebar-spacer { flex: 1; }
+
+/* the vault door: the one dark element in the shell */
+.bv-seal-card {
+    background: var(--bv-vault);
+    color: var(--bv-vault-text);
+    border-radius: var(--bv-radius-card);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bv-seal-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.bv-seal-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--bv-accent);
+}
+
+.bv-seal-dot.sealed {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--bv-vault-muted);
+}
+
+.bv-seal-meta {
+    font-family: var(--bv-mono);
+    font-size: 12px;
+    color: var(--bv-vault-muted);
+    line-height: 18px;
+}
+
+.bv-seal-card vaadin-button {
+    background: var(--bv-vault-raised);
+    color: var(--bv-vault-text);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.bv-seal-card vaadin-button:hover { background: #38322a; }
+
+.bv-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 8px 0;
+}
+
+.bv-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--bv-raised-strong);
+    color: var(--bv-text);
+    font-size: 12px;
+    font-weight: 500;
+    display: grid;
+    place-items: center;
+    flex: none;
+}
+
+.bv-user-name { flex: 1; font-weight: 500; }
+
+/* ============================================================ page */
+
+.bv-page {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 1280px;
+    padding: 32px 32px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.bv-page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.bv-page-title {
+    font-size: 28px;
+    line-height: 1.15;
+}
+
+.bv-page-sub {
+    margin-top: 4px;
+    color: var(--bv-text-2);
+}
+
+.bv-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.bv-section-title {
+    font-size: 16px;
+    line-height: 24px;
+}
+
+.bv-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+/* ============================================================ cards */
+
+.bv-card {
+    background: var(--bv-card);
+    border: 1px solid var(--bv-line);
+    border-radius: var(--bv-radius-card);
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.bv-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.bv-stat-label { color: var(--bv-text-2); }
+
+.bv-stat-value {
+    margin-top: 8px;
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.bv-stat-change {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--bv-muted);
+}
+
+.bv-stat-change .up { color: var(--bv-positive); }
+.bv-stat-change .down { color: var(--bv-negative); }
+
+.bv-split {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 16px;
+}
+
+@media (max-width: 1100px) {
+    .bv-split { grid-template-columns: 1fr; }
+}
+
+/* ============================================================ chart */
+
+.bv-chart-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+}
+
+.bv-chart-total {
+    font-family: var(--bv-mono);
+    font-size: 12px;
+    color: var(--bv-muted);
+}
+
+.bv-chart {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    align-items: end;
+    gap: 8px;
+    height: 220px;
+    margin-top: 20px;
+    padding-top: 8px;
+    border-bottom: 1px solid var(--bv-line-strong);
+    background-image: linear-gradient(var(--bv-line) 1px, transparent 1px);
+    background-size: 100% 25%;
+}
+
+.bv-bar {
+    background: var(--bv-raised-strong);
+    border-radius: 4px 4px 0 0;
+    min-height: 2px;
+    transition: background-color 150ms var(--bv-ease);
+}
+
+.bv-bar:hover { background: #d6cdbf; }
+.bv-bar.today { background: var(--bv-accent); }
+
+.bv-chart-axis {
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+    font-family: var(--bv-mono);
+    font-size: 12px;
+    color: var(--bv-muted);
+    text-align: center;
+}
+
+.bv-chart-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--bv-muted);
+}
+
+/* ============================================================ lists */
+
+.bv-recent { display: flex; flex-direction: column; }
+
+.bv-recent-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--bv-line);
+}
+
+.bv-recent-row:first-of-type { border-top: none; }
+
+.bv-recent-client { font-weight: 500; }
+
+.bv-time {
+    font-family: var(--bv-mono);
+    font-size: 12px;
+    color: var(--bv-muted);
+    white-space: nowrap;
+}
+
+.bv-addr {
+    font-family: var(--bv-mono);
+    font-size: 13px;
+    color: var(--bv-text);
+    overflow-wrap: anywhere;
+}
+
+.bv-addr .grp { color: var(--bv-muted); }
+
+/* safe-deposit box rows (one per group) */
+.bv-boxes { display: flex; flex-direction: column; gap: 8px; }
+
+vaadin-details.bv-box {
+    background: var(--bv-card);
+    border: 1px solid var(--bv-line);
+    border-radius: var(--bv-radius-card);
+    margin: 0;
+}
+
+vaadin-details.bv-box::part(summary) {
+    padding: 12px 16px;
+    border-radius: var(--bv-radius-card);
+    transition: background-color 150ms var(--bv-ease);
+}
+
+vaadin-details.bv-box::part(summary):hover { background: rgba(31, 27, 22, 0.02); }
+vaadin-details.bv-box::part(content) { padding: 0 16px 12px; }
+
+.bv-box-summary {
+    display: grid;
+    grid-template-columns: minmax(140px, 1.2fr) 64px minmax(160px, 2fr) 136px 112px;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+}
+
+.bv-box-name { font-weight: 500; font-size: 15px; }
+
+.bv-col-label {
+    display: block;
+    font-size: 12px;
+    color: var(--bv-muted);
+    line-height: 16px;
+}
+
+.bv-col-value {
+    display: block;
+    font-variant-numeric: tabular-nums;
+    line-height: 20px;
+}
+
+@media (max-width: 900px) {
+    .bv-box-summary { grid-template-columns: 1fr auto; }
+    .bv-box-summary .bv-hide-narrow { display: none; }
+}
+
+.bv-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.bv-chip {
+    font-family: var(--bv-mono);
+    font-size: 12px;
+    line-height: 20px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: var(--bv-raised);
+    color: var(--bv-text-2);
+}
+
+.bv-none { color: var(--bv-muted); }
+
+.bv-key-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 136px 120px auto;
+    align-items: center;
+    gap: 16px;
+    min-height: 44px;
+    border-top: 1px solid var(--bv-line);
+}
+
+.bv-key-row.head {
+    min-height: 36px;
+    border-top: none;
+    font-size: 12px;
+    color: var(--bv-muted);
+}
+
+.bv-row-actions { display: flex; gap: 2px; justify-content: flex-end; }
+
+.bv-status { display: inline-flex; align-items: center; gap: 6px; }
+
+.bv-status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bv-muted);
+}
+
+.bv-status.ok::before { background: var(--bv-positive); }
+.bv-status.bad::before { background: var(--bv-negative); }
+.bv-status.warn::before { background: var(--bv-accent); }
+
+.bv-actor-type { color: var(--bv-muted); font-size: 12px; margin-left: 6px; }
+
+/* ============================================================ controls */
+
 vaadin-button {
-    font-weight: 600;
-    transition: all 0.2s ease-in-out;
+    font-weight: 500;
+    border-radius: var(--bv-radius-control);
+    transition: background-color 150ms var(--bv-ease), color 150ms var(--bv-ease),
+        box-shadow 150ms var(--bv-ease);
 }
 
-/* Primary Button Glow (Orange) */
+vaadin-button:active { transform: scale(0.98); }
+
 vaadin-button[theme~="primary"] {
-    background-color: var(--vaadin-primary-color);
-    color: #0c1713; /* High contrast dark text */
-    box-shadow: 0 4px 15px rgba(254, 116, 42, 0.2);
+    background: var(--bv-text);
+    color: var(--bv-card);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
 }
 
-vaadin-button[theme~="primary"]:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(254, 116, 42, 0.5); /* Stronger orange glow */
+vaadin-button[theme~="primary"]:hover { background: #38322a; }
+
+vaadin-button.bv-secondary {
+    background: var(--bv-card);
+    color: var(--bv-text);
+    box-shadow: inset 0 0 0 1px var(--bv-line-strong);
 }
 
-/* Error/Lock Button Glow (Crimson) */
-vaadin-button[theme~="error"] {
-    background-color: var(--vaadin-error-color);
-    color: #f1e9db;
+vaadin-button.bv-secondary:hover { background: var(--bv-raised); }
+
+vaadin-button[theme~="tertiary"] { color: var(--bv-text-2); }
+vaadin-button[theme~="tertiary"]:hover { color: var(--bv-text); background: var(--bv-raised); }
+vaadin-button[theme~="error"][theme~="tertiary"] { color: var(--bv-negative); }
+
+vaadin-button.bv-icon-btn {
+    min-width: 32px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--bv-muted);
 }
 
-vaadin-button[theme~="error"]:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(119, 47, 26, 0.6); 
-}
-/* =========================================
-   0.2 additions: header, text areas, badges
-   ========================================= */
-vaadin-text-area {
-    --vaadin-input-field-background: rgba(241, 233, 219, 0.05);
-    --vaadin-input-field-border-color: rgba(254, 116, 42, 0.3);
+vaadin-button.bv-icon-btn:hover { color: var(--bv-text); background: var(--bv-raised); }
+
+vaadin-button.bv-accent {
+    background: var(--bv-accent);
+    color: var(--bv-vault);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
-.app-header {
-    padding: 0 var(--lumo-space-m, 1rem);
-    gap: var(--lumo-space-m, 1rem);
+vaadin-button.bv-accent:hover { background: #ff8547; }
+
+.bv-icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
 }
 
-.app-logo {
-    font-size: 1.15rem;
-    margin: 0;
+vaadin-text-field, vaadin-password-field, vaadin-text-area, vaadin-integer-field, vaadin-select {
+    --vaadin-input-field-background: var(--bv-card);
+    --vaadin-input-field-border-color: var(--bv-line-strong);
 }
 
-.muted {
-    color: rgba(241, 233, 219, 0.6);
-    font-size: 0.9em;
+vaadin-text-field.bv-search { width: 240px; }
+
+/* ============================================================ grids (clients, audit, dialogs) */
+
+vaadin-grid {
+    --vaadin-grid-cell-background: var(--bv-card);
+    background: var(--bv-card);
+    border: 1px solid var(--bv-line);
+    border-radius: var(--bv-radius-card);
+    font-variant-numeric: tabular-nums;
 }
 
-/* Keys, tokens and revealed values */
-.mono textarea,
-.mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    word-break: break-all;
+vaadin-grid::part(header-cell) {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--bv-muted);
 }
 
-.glass-panel {
-    padding: 1.25rem;
+vaadin-grid::part(row):hover { background: rgba(31, 27, 22, 0.02); }
+
+/* ============================================================ auth screens */
+
+.bv-auth {
+    min-height: 100vh;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    padding: 32px 16px;
 }
 
-[theme~="badge"] {
-    display: inline-block;
-    padding: 0.15em 0.6em;
-    border-radius: 999px;
-    font-size: 0.8em;
+.bv-auth-card {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.bv-auth-card.wide { max-width: 520px; }
+
+.bv-auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
     font-weight: 600;
+    margin-bottom: 8px;
 }
 
-[theme~="badge"][theme~="success"] {
-    background: rgba(76, 175, 80, 0.2);
-    color: #9be29f;
+.bv-auth-title { font-size: 24px; line-height: 1.2; }
+
+.bv-auth-text { color: var(--bv-text-2); margin: 0; line-height: 20px; }
+
+.bv-form-section {
+    font-size: 12px;
+    color: var(--bv-muted);
+    margin-top: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--bv-line);
 }
 
-[theme~="badge"][theme~="error"] {
-    background: rgba(254, 116, 42, 0.2);
-    color: #fe742a;
+vaadin-login-form::part(form) { padding: 0; }
+vaadin-login-form { --vaadin-login-form-background: transparent; }
+
+/* unseal: the vault door, centered in the content area */
+.bv-door-wrap {
+    min-height: calc(100vh - 64px);
+    display: grid;
+    place-items: center;
+    padding: 32px 16px;
+    box-sizing: border-box;
 }
 
-[theme~="badge"][theme~="contrast"] {
-    background: rgba(241, 233, 219, 0.12);
-    color: #f1e9db;
+.bv-door {
+    width: 100%;
+    max-width: 440px;
+    background: var(--bv-vault);
+    color: var(--bv-vault-text);
+    border-radius: 20px;
+    padding: 32px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 8px 24px rgba(31, 27, 22, 0.12);
+    --vaadin-text-color: var(--bv-vault-text);
+    --vaadin-text-color-secondary: var(--bv-vault-muted);
+    --vaadin-input-field-background: var(--bv-vault-raised);
+    --vaadin-input-field-border-color: rgba(239, 233, 222, 0.12);
+    --vaadin-input-field-value-color: var(--bv-vault-text);
+    --vaadin-input-field-label-color: var(--bv-vault-muted);
+    color-scheme: dark;
 }
+
+.bv-door h1 { color: var(--bv-vault-text); font-size: 24px; }
+.bv-door p { color: var(--bv-vault-muted); margin: 0; line-height: 20px; }
+
+.bv-door-dial {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--bv-vault-raised);
+    color: var(--bv-accent);
+    box-shadow: inset 0 0 0 1px rgba(239, 233, 222, 0.10);
+}
+
+/* ============================================================ settings */
+
+.bv-settings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.bv-settings .bv-card { display: flex; flex-direction: column; gap: 12px; }
+.bv-settings .bv-card p { margin: 0; color: var(--bv-text-2); line-height: 20px; }
+
+/* ============================================================ misc */
+
+.mono, .mono textarea { font-family: var(--bv-mono); word-break: break-all; }
+.muted { color: var(--bv-muted); }
+
+.bv-warning-list { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--bv-text-2); }
+
+vaadin-anchor, a { color: var(--bv-accent-ink); }
+
+.bv-recent-row > :nth-child(2), .bv-recent-row > :nth-child(4) { justify-self: end; }
+
+.export-link {
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--bv-text-2);
+}
+
+.export-link:hover { background: var(--bv-raised); color: var(--bv-text); }
+
+vaadin-context-menu-item.bv-danger-item { color: var(--bv-negative); }
+
+/* ============================================================ fixes after the first render */
+
+html {
+    --aura-app-layout-radius: 0px;
+    --vaadin-side-nav-items-gap: 2px;
+}
+
+@media (min-width: 1025px) {
+    vaadin-app-layout::part(navbar) { display: none; }
+}
+
+vaadin-side-nav-item::part(content) {
+    height: 36px;
+    min-height: 36px;
+    padding-block: 0;
+}
+
+/* inputs on the dark vault door */
+.bv-door vaadin-password-field::part(input-field) {
+    background: var(--bv-vault-raised);
+    color: var(--bv-vault-text);
+    box-shadow: inset 0 0 0 1px rgba(239, 233, 222, 0.12);
+}
+
+.bv-door vaadin-password-field::part(label),
+.bv-door vaadin-radio-group::part(label) { color: var(--bv-vault-muted); }
+
+.bv-door vaadin-radio-button { color: var(--bv-vault-text); }
+
+.bv-door vaadin-password-field-button { color: var(--bv-vault-muted); }

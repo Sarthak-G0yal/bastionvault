@@ -1,8 +1,10 @@
 package tech.sarthakgoyal.bastionvault.ui.views;
 
+import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.login.LoginForm;
 import com.vaadin.flow.component.login.LoginI18n;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
@@ -11,12 +13,13 @@ import com.vaadin.flow.server.auth.AnonymousAllowed;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 
 import tech.sarthakgoyal.bastionvault.service.SetupService;
+import tech.sarthakgoyal.bastionvault.ui.UiSupport;
 
 /** Per-browser admin login (decision 1A). Posts to Spring Security's /login. */
 @Route("login")
 @PageTitle("Sign in | BastionVault")
 @AnonymousAllowed
-public class LoginView extends VerticalLayout implements BeforeEnterObserver {
+public class LoginView extends Div implements BeforeEnterObserver {
 
     private final SetupService setup;
     private final AuthenticationContext auth;
@@ -25,20 +28,26 @@ public class LoginView extends VerticalLayout implements BeforeEnterObserver {
     public LoginView(SetupService setup, AuthenticationContext auth) {
         this.setup = setup;
         this.auth = auth;
-        setSizeFull();
-        setAlignItems(Alignment.CENTER);
-        setJustifyContentMode(JustifyContentMode.CENTER);
+        addClassName("bv-auth");
 
         LoginI18n i18n = LoginI18n.createDefault();
-        i18n.getForm().setTitle("BastionVault");
+        i18n.getForm().setTitle("");
+        i18n.getForm().setSubmit("Sign in");
         i18n.getErrorMessage().setTitle("Sign-in failed");
         i18n.getErrorMessage().setMessage(
-                "Wrong username or password, or too many attempts. After 5 failures, sign-in is blocked for 15 minutes.");
+                "Wrong username or password, or too many attempts. After 5 failures sign-in is paused for 15 minutes.");
         login.setI18n(i18n);
         login.setAction("login");
         login.setForgotPasswordButtonVisible(false);
-        login.addClassName("glass-panel");
-        add(login);
+
+        H1 title = new H1("Sign in");
+        title.addClassName("bv-auth-title");
+        Paragraph text = new Paragraph("Signing in opens the console. Reading secrets also needs the vault to be "
+                + "unsealed.");
+        text.addClassName("bv-auth-text");
+        Div card = new Div(UiSupport.brand(), title, text, login);
+        card.addClassName("bv-auth-card");
+        add(card);
     }
 
     @Override

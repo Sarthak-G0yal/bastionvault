@@ -1,40 +1,41 @@
 package tech.sarthakgoyal.bastionvault.ui.views;
 
-import java.time.ZoneId;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import com.vaadin.flow.component.accordion.Accordion;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.confirmdialog.ConfirmDialog;
+import com.vaadin.flow.component.contextmenu.ContextMenu;
+import com.vaadin.flow.component.details.Details;
 import com.vaadin.flow.component.dialog.Dialog;
-import com.vaadin.flow.component.formlayout.FormLayout;
-import com.vaadin.flow.component.grid.Grid;
-import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Anchor;
+import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.H2;
-import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.component.icon.VaadinIcon;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.streams.DownloadHandler;
 import com.vaadin.flow.server.streams.DownloadResponse;
-import com.vaadin.flow.router.Route;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 
 import jakarta.annotation.security.RolesAllowed;
+import tech.sarthakgoyal.bastionvault.domain.ApiClient;
+import tech.sarthakgoyal.bastionvault.domain.AuditEvent;
 import tech.sarthakgoyal.bastionvault.domain.AuditEvent.Outcome;
 import tech.sarthakgoyal.bastionvault.domain.Secret;
+import tech.sarthakgoyal.bastionvault.service.ActivityService;
 import tech.sarthakgoyal.bastionvault.service.AuditService;
+import tech.sarthakgoyal.bastionvault.service.ClientService;
 import tech.sarthakgoyal.bastionvault.service.SecretCodec;
 import tech.sarthakgoyal.bastionvault.service.SecretFormat;
 import tech.sarthakgoyal.bastionvault.service.SecretImportService;
@@ -42,182 +43,358 @@ import tech.sarthakgoyal.bastionvault.service.SecretService;
 import tech.sarthakgoyal.bastionvault.ui.UiSupport;
 import tech.sarthakgoyal.bastionvault.ui.layout.MainLayout;
 
-/** Create, update, reveal and delete secrets. Values are only decrypted on explicit "Reveal". */
+/**
+ * Overview and secrets: live figures, the 14-day API reads chart, recent machine access, and one
+ * "safe-deposit box" row per group listing its keys and which clients can open it. Values are only
+ * decrypted on an explicit Reveal.
+ */
 @Route(value = "", layout = MainLayout.class)
 @PageTitle("Secrets | BastionVault")
 @RolesAllowed("ADMIN")
-public class SecretsView extends VerticalLayout {
+public class SecretsView extends Div {
 
-    static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
-            .withZone(ZoneId.systemDefault());
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d", Locale.ENGLISH);
+    private static final DateTimeFormatter DAY_LONG = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH);
 
     private final SecretService secrets;
     private final AuditService audit;
     private final AuthenticationContext auth;
-    private final SecretImportService importer;
     private final SecretCodec codec;
+    private final ActivityService activity;
+    private final ClientService clients;
 
-    private final TextField group = new TextField("Group");
-    private final TextField key = new TextField("Key");
-    private final TextArea value = new TextArea("Value");
-    private final TextField filter = new TextField();
-    private final Accordion groups = new Accordion();
+    private final Div subtitle = new Div();
+    private final Div stats = new Div();
+    private final Div chartCard = new Div();
+    private final Div recentCard = new Div();
+    private final Div boxes = new Div();
+    private final TextField search = new TextField();
 
     public SecretsView(SecretService secrets, AuditService audit, AuthenticationContext auth,
-            SecretImportService importer, SecretCodec codec) {
+            SecretImportService importer, SecretCodec codec, ActivityService activity, ClientService clients) {
         this.secrets = secrets;
-        this.importer = importer;
-        this.codec = codec;
         this.audit = audit;
         this.auth = auth;
-        setSizeFull();
+        this.codec = codec;
+        this.activity = activity;
+        this.clients = clients;
+        setWidthFull();
 
-        group.setPlaceholder("e.g. affine");
-        key.setPlaceholder("e.g. DATABASE_URL");
-        value.setPlaceholder("Multi-line values (PEM keys) are fine");
-        value.setMaxHeight("10em");
-        UiSupport.noAutofill(value);
+        Div page = UiSupport.page();
+        Div header = UiSupport.header("Secrets", null,
+                UiSupport.secondary("Import file", "upload", e -> new ImportDialog(secrets, importer, codec, audit,
+                        admin(), null, this::refresh).open()),
+                UiSupport.primary("New secret", "plus", e -> openEditor(null, null)));
+        subtitle.addClassName("bv-page-sub");
+        header.getChildren().findFirst().ifPresent(left -> ((Div) left).add(subtitle));
 
-        Button save = new Button("Encrypt & save", VaadinIcon.LOCK.create(), e -> save());
-        save.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        Button generate = new Button("Generate random (32)", VaadinIcon.MAGIC.create(), e -> generate());
-        Button importFile = new Button("Import file", VaadinIcon.UPLOAD.create(),
-                e -> new ImportDialog(secrets, importer, codec, audit, UiSupport.admin(auth), group.getValue().trim(),
-                        this::refresh).open());
+        stats.addClassName("bv-stats");
+        chartCard.addClassName("bv-card");
+        recentCard.addClassName("bv-card");
+        Div split = new Div(chartCard, recentCard);
+        split.addClassName("bv-split");
 
-        FormLayout form = new FormLayout(group, key, value);
-        form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("700px", 3));
+        search.setPlaceholder("Search");
+        search.setClearButtonVisible(true);
+        search.setValueChangeMode(ValueChangeMode.LAZY);
+        search.setPrefixComponent(UiSupport.icon("search"));
+        search.addClassName("bv-search");
+        search.addValueChangeListener(e -> renderBoxes());
+        H2 groupsTitle = new H2("Groups");
+        groupsTitle.addClassName("bv-section-title");
+        Div groupsHead = new Div(groupsTitle, search);
+        groupsHead.addClassName("bv-section-head");
+        boxes.addClassName("bv-boxes");
 
-        filter.setPlaceholder("Filter groups and keys");
-        filter.setClearButtonVisible(true);
-        filter.setValueChangeMode(ValueChangeMode.LAZY);
-        filter.addValueChangeListener(e -> refresh());
-        filter.setPrefixComponent(VaadinIcon.SEARCH.create());
-
-        groups.setWidthFull();
-        add(new H2("Secrets"), form, new HorizontalLayout(save, generate, importFile), filter, groups);
+        page.add(header, stats, split, groupsHead, boxes);
+        add(page);
         refresh();
     }
 
-    private void save() {
-        try {
-            boolean created = secrets.put(group.getValue().trim(), key.getValue().trim(), value.getValue(),
-                    UiSupport.actor(auth));
-            audit.admin(UiSupport.admin(auth), "WRITE_SECRET", group.getValue() + "/" + key.getValue(), Outcome.SUCCESS);
-            UiSupport.success(created ? "Secret created" : "Secret updated");
-            key.clear();
-            value.clear();
-            refresh();
-        } catch (RuntimeException ex) {
-            UiSupport.error(ex.getMessage());
-        }
+    private String admin() {
+        return UiSupport.admin(auth);
     }
 
-    private void generate() {
-        try {
-            var result = secrets.generateIfAbsent(group.getValue().trim(), key.getValue().trim(), 32,
-                    UiSupport.actor(auth));
-            audit.admin(UiSupport.admin(auth), "GENERATE_SECRET", group.getValue() + "/" + key.getValue(),
-                    Outcome.SUCCESS);
-            UiSupport.success(result.created() ? "Random value generated" : "Secret already exists; left unchanged");
-            key.clear();
-            refresh();
-        } catch (RuntimeException ex) {
-            UiSupport.error(ex.getMessage());
-        }
-    }
+    // ---------------------------------------------------------------- data
+
+    private List<Secret> all = List.of();
+    private ActivityService.Snapshot snapshot;
+    private Map<String, List<String>> readers = Map.of();
 
     private void refresh() {
-        groups.getChildren().toList().forEach(groups::remove);
-        String q = filter.getValue() == null ? "" : filter.getValue().toLowerCase(Locale.ROOT);
-        Map<String, List<Secret>> byGroup = new LinkedHashMap<>();
-        for (Secret s : secrets.listAll()) {
-            if (q.isEmpty() || s.getGroupName().toLowerCase(Locale.ROOT).contains(q)
-                    || s.getSecretKey().toLowerCase(Locale.ROOT).contains(q)) {
-                byGroup.computeIfAbsent(s.getGroupName(), g -> new java.util.ArrayList<>()).add(s);
+        all = secrets.listAll();
+        snapshot = activity.snapshot(6);
+        List<String> groupNames = all.stream().map(Secret::getGroupName).distinct().toList();
+        readers = activity.readersByGroup(groupNames);
+        subtitle.setText(all.size() + (all.size() == 1 ? " secret" : " secrets") + " in " + groupNames.size()
+                + (groupNames.size() == 1 ? " group" : " groups"));
+        renderStats(groupNames.size());
+        renderChart();
+        renderRecent();
+        renderBoxes();
+    }
+
+    // ---------------------------------------------------------------- figures
+
+    private void renderStats(int groupCount) {
+        stats.removeAll();
+        List<ApiClient> clientList = clients.list();
+        long active = clientList.stream().filter(ApiClient::isActive).count();
+        int delta = snapshot.reads24h() - snapshot.readsPrevious24h();
+        stats.add(
+                stat("Groups", String.valueOf(groupCount), null),
+                stat("Secrets", String.valueOf(all.size()), null),
+                stat("Machine clients", String.valueOf(active), "of " + clientList.size() + " registered"),
+                stat("API reads, 24 h", String.valueOf(snapshot.reads24h()),
+                        (delta >= 0 ? "+" : "") + delta + " vs previous 24 h"));
+    }
+
+    private static Div stat(String label, String value, String change) {
+        Div l = new Div(label);
+        l.addClassName("bv-stat-label");
+        Div v = new Div(value);
+        v.addClassName("bv-stat-value");
+        Div card = UiSupport.card(l, v);
+        if (change != null) {
+            Div c = new Div(change);
+            c.addClassName("bv-stat-change");
+            card.add(c);
+        }
+        return card;
+    }
+
+    private void renderChart() {
+        chartCard.removeAll();
+        H2 title = new H2("API reads, last 14 days");
+        title.addClassName("bv-section-title");
+        Span total = new Span(snapshot.totalReads() + " reads");
+        total.addClassName("bv-chart-total");
+        Div head = new Div(title, total);
+        head.addClassName("bv-chart-head");
+
+        int max = snapshot.days().stream().mapToInt(ActivityService.Day::reads).max().orElse(0);
+        Div chart = new Div();
+        chart.addClassName("bv-chart");
+        Div axis = new Div();
+        axis.addClassName("bv-chart-axis");
+        for (int i = 0; i < snapshot.days().size(); i++) {
+            ActivityService.Day day = snapshot.days().get(i);
+            Div bar = new Div();
+            bar.addClassName("bv-bar");
+            if (i == snapshot.days().size() - 1) {
+                bar.addClassName("today");
             }
+            bar.getStyle().set("height", max == 0 ? "0" : (day.reads() * 100.0 / max) + "%");
+            bar.getElement().setAttribute("title",
+                    DAY_LONG.format(day.date()) + " · " + day.reads() + (day.reads() == 1 ? " read" : " reads"));
+            chart.add(bar);
+            axis.add(new Span(DAY.format(day.date())));
         }
-        if (byGroup.isEmpty()) {
-            groups.add("No secrets yet", new Paragraph("Add one with the form above."));
-            return;
+        if (max == 0) {
+            Div empty = new Div("No machine has read a secret in the last 14 days");
+            empty.addClassName("bv-chart-empty");
+            chart.add(empty);
         }
-        byGroup.forEach((name, list) -> groups.add(name + " (" + list.size() + ")",
-                new VerticalLayout(exportLinks(name), grid(list))));
+        chartCard.add(head, chart, axis);
+    }
+
+    private void renderRecent() {
+        recentCard.removeAll();
+        H2 title = new H2("Recent machine access");
+        title.addClassName("bv-section-title");
+        Div list = new Div();
+        list.addClassName("bv-recent");
+        if (snapshot.recent().isEmpty()) {
+            Div none = new Div("No machine access yet. Clients appear here after their first request.");
+            none.addClassNames("bv-none");
+            none.getStyle().set("margin-top", "12px");
+            list.add(none);
+        }
+        for (AuditEvent e : snapshot.recent()) {
+            Span client = new Span(e.getActor());
+            client.addClassName("bv-recent-client");
+            Span time = new Span(UiSupport.relative(e.getOccurredAt()));
+            time.addClassName("bv-time");
+            Div what = new Div();
+            String target = e.getTarget();
+            if (target != null && target.contains("/")) {
+                what.add(UiSupport.address(target.substring(0, target.indexOf('/')),
+                        target.substring(target.indexOf('/') + 1)));
+            } else {
+                Span t = new Span(target == null ? UiSupport.humanize(e.getAction()) : target);
+                t.addClassName("bv-addr");
+                what.add(t);
+            }
+            Div outcome = new Div();
+            if (!Outcome.SUCCESS.name().equals(e.getOutcome())) {
+                outcome.add(UiSupport.status(UiSupport.humanize(e.getOutcome()), "bad"));
+            }
+            Div row = new Div(client, time, what, outcome);
+            row.addClassName("bv-recent-row");
+            list.add(row);
+        }
+        recentCard.add(title, list);
+    }
+
+    // ---------------------------------------------------------------- group boxes
+
+    private void renderBoxes() {
+        boxes.removeAll();
+        String q = search.getValue() == null ? "" : search.getValue().trim().toLowerCase(Locale.ROOT);
+        Map<String, List<Secret>> byGroup = new LinkedHashMap<>();
+        for (Secret s : all) {
+            byGroup.computeIfAbsent(s.getGroupName(), g -> new ArrayList<>()).add(s);
+        }
+        int shown = 0;
+        for (Map.Entry<String, List<Secret>> entry : byGroup.entrySet()) {
+            String group = entry.getKey();
+            List<Secret> keys = entry.getValue();
+            boolean groupMatch = q.isEmpty() || group.toLowerCase(Locale.ROOT).contains(q);
+            List<Secret> matchingKeys = groupMatch ? keys
+                    : keys.stream().filter(s -> s.getSecretKey().toLowerCase(Locale.ROOT).contains(q)).toList();
+            if (matchingKeys.isEmpty()) {
+                continue;
+            }
+            Details box = new Details(boxSummary(group, keys), boxContent(group, matchingKeys));
+            box.addClassName("bv-box");
+            box.setOpened(!q.isEmpty());
+            boxes.add(box);
+            shown++;
+        }
+        if (shown == 0) {
+            Div none = new Div(all.isEmpty() ? "No secrets yet. Add one with New secret, or import a file."
+                    : "Nothing matches “" + search.getValue() + "”");
+            none.addClassNames("bv-card", "bv-none");
+            boxes.add(none);
+        }
+    }
+
+    private Div boxSummary(String group, List<Secret> keys) {
+        Span name = new Span(group);
+        name.addClassName("bv-box-name");
+
+        List<String> openFor = readers.getOrDefault(group, List.of());
+        Div chips = new Div();
+        chips.addClassName("bv-chips");
+        if (openFor.isEmpty()) {
+            Span none = new Span("No client");
+            none.addClassName("bv-none");
+            chips.add(none);
+        } else {
+            openFor.forEach(c -> {
+                Span chip = new Span(c);
+                chip.addClassName("bv-chip");
+                chips.add(chip);
+            });
+        }
+        Instant changed = keys.stream().map(Secret::getUpdatedAt).max(Instant::compareTo).orElse(null);
+        Instant read = snapshot.lastReadByGroup().get(group);
+
+        Div summary = new Div(name,
+                column("Keys", new Span(String.valueOf(keys.size())), false),
+                column("Opens for", chips, false),
+                column("Last change", new Span(changed == null ? "-" : UiSupport.DATE_TIME.format(changed)), true),
+                column("Last read", new Span(read == null ? "None in 14 d" : UiSupport.relative(read)), true));
+        summary.addClassName("bv-box-summary");
+        return summary;
+    }
+
+    private static Div column(String label, com.vaadin.flow.component.Component value, boolean hideNarrow) {
+        Span l = new Span(label);
+        l.addClassName("bv-col-label");
+        Div v = new Div(value);
+        v.addClassName("bv-col-value");
+        Div col = new Div(l, v);
+        if (hideNarrow) {
+            col.addClassName("bv-hide-narrow");
+        }
+        return col;
+    }
+
+    private Div boxContent(String group, List<Secret> keys) {
+        Div content = new Div();
+
+        Div head = new Div(new Span("Address"), new Span("Updated"), new Span("By"), exportLinks(group));
+        head.addClassNames("bv-key-row", "head");
+        content.add(head);
+
+        for (Secret s : keys) {
+            Span updated = new Span(UiSupport.DATE_TIME.format(s.getUpdatedAt()));
+            updated.addClassName("bv-time");
+            Div actions = new Div(
+                    UiSupport.iconButton("eye", "Reveal", e -> reveal(s)),
+                    UiSupport.iconButton("copy", "Copy address", e -> {
+                        UiSupport.copy(s.getGroupName() + "/" + s.getSecretKey());
+                        UiSupport.success("Copied " + s.getGroupName() + "/" + s.getSecretKey());
+                    }),
+                    UiSupport.iconButton("pencil", "Replace value", e -> openEditor(s.getGroupName(), s.getSecretKey())),
+                    moreMenu(s));
+            actions.addClassName("bv-row-actions");
+            Div row = new Div(UiSupport.address(s.getGroupName(), s.getSecretKey()), updated,
+                    UiSupport.actor(s.getUpdatedBy()), actions);
+            row.addClassName("bv-key-row");
+            content.add(row);
+        }
+        return content;
+    }
+
+    private Button moreMenu(Secret s) {
+        Button more = UiSupport.iconButton("ellipsis", "More", e -> { });
+        ContextMenu menu = new ContextMenu(more);
+        menu.setOpenOnClick(true);
+        menu.addItem("Delete", e -> confirmDelete(s)).addClassName("bv-danger-item");
+        return more;
     }
 
     /** Download links for one group. The file is generated on click, audited, and never cached. */
-    private HorizontalLayout exportLinks(String groupName) {
-        String admin = UiSupport.admin(auth);
-        HorizontalLayout links = new HorizontalLayout();
-        links.setDefaultVerticalComponentAlignment(Alignment.BASELINE);
-        Span label = new Span("Export");
-        label.addClassName("muted");
-        links.add(label);
+    private Div exportLinks(String groupName) {
+        String admin = admin();
+        Div links = new Div();
+        links.addClassName("bv-row-actions");
         for (SecretFormat format : SecretFormat.values()) {
             Anchor link = new Anchor(DownloadHandler.fromInputStream(event -> {
-                byte[] body = codec.writeGroup(secrets.getGroup(groupName), format)
-                        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                byte[] body = codec.writeGroup(secrets.getGroup(groupName), format).getBytes(StandardCharsets.UTF_8);
                 audit.admin(admin, "EXPORT_" + format.name(), groupName, Outcome.SUCCESS);
-                return new DownloadResponse(new java.io.ByteArrayInputStream(body), groupName + format.extension(),
+                return new DownloadResponse(new ByteArrayInputStream(body), groupName + format.extension(),
                         format.contentType(), body.length);
             }), format.label());
             link.getElement().setAttribute("download", true);
+            link.getElement().setAttribute("title", "Export " + groupName + " as " + format.label());
             link.addClassName("export-link");
             links.add(link);
         }
         return links;
     }
 
-    private Grid<Secret> grid(List<Secret> items) {
-        Grid<Secret> grid = new Grid<>(Secret.class, false);
-        grid.addColumn(Secret::getSecretKey).setHeader("Key").setAutoWidth(true);
-        grid.addColumn(s -> "••••••••").setHeader("Value");
-        grid.addColumn(s -> TIME.format(s.getUpdatedAt())).setHeader("Updated").setAutoWidth(true);
-        grid.addColumn(Secret::getUpdatedBy).setHeader("By").setAutoWidth(true);
-        grid.addComponentColumn(s -> {
-            Button reveal = new Button("Reveal", VaadinIcon.EYE.create(), e -> reveal(s));
-            Button edit = new Button("Edit", VaadinIcon.EDIT.create(), e -> {
-                group.setValue(s.getGroupName());
-                key.setValue(s.getSecretKey());
-                value.clear();
-                value.focus();
-            });
-            Button delete = new Button("Delete", VaadinIcon.TRASH.create(), e -> confirmDelete(s));
-            delete.addThemeVariants(ButtonVariant.LUMO_ERROR);
-            for (Button b : List.of(reveal, edit, delete)) {
-                b.addThemeVariants(ButtonVariant.LUMO_SMALL, ButtonVariant.LUMO_TERTIARY);
-            }
-            return new HorizontalLayout(reveal, edit, delete);
-        }).setHeader("Actions").setAutoWidth(true);
-        grid.addThemeVariants(GridVariant.LUMO_COMPACT);
-        grid.setAllRowsVisible(true);
-        grid.setItems(items);
-        return grid;
+    // ---------------------------------------------------------------- actions
+
+    private void openEditor(String group, String key) {
+        new SecretDialog(secrets, audit, admin(), group, key, this::refresh).open();
     }
 
     private void reveal(Secret s) {
         String target = s.getGroupName() + "/" + s.getSecretKey();
         try {
             String plain = secrets.get(s.getGroupName(), s.getSecretKey()).orElse("");
-            audit.admin(UiSupport.admin(auth), "REVEAL_SECRET", target, Outcome.SUCCESS);
+            audit.admin(admin(), "REVEAL_SECRET", target, Outcome.SUCCESS);
             Dialog dialog = new Dialog();
             dialog.setHeaderTitle(target);
-            dialog.setWidth("640px");
+            dialog.setWidth("560px");
             TextArea field = new TextArea();
             field.setValue(plain);
             field.setReadOnly(true);
             field.setWidthFull();
             field.addClassName("mono");
-            Button copy = new Button("Copy", e -> {
-                getUI().ifPresent(ui -> ui.getPage().executeJs("navigator.clipboard.writeText($0)", plain));
-                UiSupport.success("Copied");
-            });
-            Button close = new Button("Close", e -> dialog.close());
             dialog.add(field);
-            dialog.getFooter().add(copy, close);
+            dialog.getFooter().add(
+                    UiSupport.secondary("Copy value", "copy", e -> {
+                        UiSupport.copy(plain);
+                        UiSupport.success("Copied");
+                    }),
+                    UiSupport.primary("Close", null, e -> dialog.close()));
             dialog.open();
         } catch (RuntimeException ex) {
-            audit.admin(UiSupport.admin(auth), "REVEAL_SECRET", target, Outcome.FAILED);
+            audit.admin(admin(), "REVEAL_SECRET", target, Outcome.FAILED);
             UiSupport.error("Could not decrypt: " + ex.getMessage());
         }
     }
@@ -225,9 +402,9 @@ public class SecretsView extends VerticalLayout {
     private void confirmDelete(Secret s) {
         String target = s.getGroupName() + "/" + s.getSecretKey();
         ConfirmDialog confirm = new ConfirmDialog("Delete " + target + "?",
-                "Machines that read this secret will get 404 from now on.", "Delete", e -> {
+                "Machines that read this secret get 404 from now on. This cannot be undone.", "Delete", e -> {
                     secrets.delete(s.getGroupName(), s.getSecretKey());
-                    audit.admin(UiSupport.admin(auth), "DELETE_SECRET", target, Outcome.SUCCESS);
+                    audit.admin(admin(), "DELETE_SECRET", target, Outcome.SUCCESS);
                     refresh();
                 });
         confirm.setConfirmButtonTheme("error primary");

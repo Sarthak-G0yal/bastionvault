@@ -129,7 +129,7 @@ class VaultImportDialog extends Dialog {
         int willStore = overwrite.getValue() ? total : total - existing;
         summary.setText(fileName + ": " + rows.size() + " groups, " + total + " keys, " + willStore + " will be stored");
         parsed.warnings().forEach(w -> {
-            Span s = new Span("⚠ " + w);
+            Span s = new Span(w);
             s.addClassName("muted");
             warnings.add(s);
         });

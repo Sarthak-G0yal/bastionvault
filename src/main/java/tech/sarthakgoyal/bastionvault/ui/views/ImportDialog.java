@@ -83,7 +83,8 @@ class ImportDialog extends Dialog {
         format.setLabel("Format");
         format.setItems(SecretFormat.values());
         format.setItemLabelGenerator(SecretFormat::label);
-        format.setHelperText("Detected from the file name; change it if the guess is wrong");
+        format.setHelperText("Detected from the file name");
+        format.setWidth("240px");
         format.setValue(SecretFormat.ENV);
         format.addValueChangeListener(e -> {
             if (e.isFromClient() && fileData != null) {
@@ -185,7 +186,7 @@ class ImportDialog extends Dialog {
         summary.setText(fileName + ": " + rows.size() + " entries, " + willStore + " will be stored"
                 + (groupValid ? "" : ". Enter a valid group name first."));
         parsed.warnings().forEach(w -> {
-            Span s = new Span("⚠ " + w);
+            Span s = new Span(w);
             s.addClassName("muted");
             warnings.add(s);
         });

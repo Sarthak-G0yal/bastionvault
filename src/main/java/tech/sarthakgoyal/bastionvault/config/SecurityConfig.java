@@ -73,7 +73,7 @@ public class SecurityConfig {
                 .headers(h -> h
                         .referrerPolicy(r -> r.policy(ReferrerPolicy.NO_REFERRER))
                         .frameOptions(f -> f.deny()))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/styles.css").permitAll())
+                .authorizeHttpRequests(auth -> auth.requestMatchers("/styles.css", "/fonts/**", "/icons/**").permitAll())
                 .with(VaadinSecurityConfigurer.vaadin(), vaadin -> vaadin.loginView(LoginView.class));
         return http.build();
     }

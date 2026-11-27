@@ -325,3 +325,8 @@ deployments instead of `latest`.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+Bundled assets: the Geist and Geist Mono typefaces (SIL Open Font License, `fonts/GEIST-LICENSE.txt`) and
+Lucide icons (ISC, `icons/LUCIDE-LICENSE.txt`), served from the app itself, so the UI loads nothing from
+the internet. The interface was redesigned following *unslop* by Damir Sokolovsky
+([@heydamir](https://x.com/heydamir)), CC BY 4.0.
