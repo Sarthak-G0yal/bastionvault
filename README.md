@@ -322,6 +322,11 @@ Releases: push a tag `vX.Y.Z`. CI runs the tests and publishes `sarthakg0yal/bas
 `:X.Y`. This needs the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets. Pin a version in
 deployments instead of `latest`.
 
+## Contributing
+
+Bug reports, fixes and documentation are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
