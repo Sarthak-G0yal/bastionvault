@@ -47,7 +47,7 @@
 		<java.version>21</java.version>
 		<vaadin.version>25.1.13</vaadin.version>
 		<!-- Vaadin's jsoup, pinned past GHSA-65r4-943x-97jj (fixed in 1.23.2). Drop once Vaadin ships it. -->
-		<jsoup.version>1.23.2</jsoup.version>
+		<jsoup.version>1.24.1</jsoup.version>
 	</properties>
 
 	<dependencyManagement>
